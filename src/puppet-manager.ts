@@ -1,9 +1,10 @@
 import path       from 'path'
-import readPkgUp  from 'read-pkg-up'
 
-import npm          from 'npm-programmatic'
-import pkgDir       from 'pkg-dir'
-import semver       from 'semver'
+import readPkgUp  from 'read-pkg-up'
+import npm        from 'npm-programmatic'
+import pkgDir     from 'pkg-dir'
+import semver     from 'semver'
+import inGfw      from 'in-gfw'
 
 import {
   Puppet,
@@ -16,15 +17,10 @@ import {
 }                       from './config'
 import {
   PUPPET_DEPENDENCIES,
-  PUPPET_NAME_DEFAULT,
   PuppetModuleName,
 }                       from './puppet-config'
-import {
-  // Wechaty,
-}                       from './wechaty'
 
 export interface ResolveOptions {
-  // wechaty        : Wechaty,
   puppet         : Puppet | PuppetModuleName,
   puppetOptions? : PuppetOptions,
 }
@@ -35,15 +31,31 @@ export class PuppetManager {
     options: ResolveOptions
   ): Promise<Puppet> {
     log.verbose('PuppetManager', 'resolve({puppet: %s, puppetOptions: %s})',
-                                  // options.wechaty,
-                                  options.puppet,
-                                  JSON.stringify(options.puppetOptions),
-                )
+      options.puppet,
+      JSON.stringify(options.puppetOptions),
+    )
 
     let puppetInstance: Puppet
 
+    /**
+     * Huan(202001): (DEPRECATED) When we are developing, we might experiencing we have two version of wechaty-puppet installed,
+     *  if `optoins.puppet` is Puppet v1, but the `Puppet` in Wechaty is v2,
+     *  then options.puppet will not instanceof Puppet.
+     *  So I changed here to match not a string as a workaround.
+     *
+     * Huan(202020): The wechaty-puppet-xxx must NOT dependencies `wechaty-puppet` so that it can be `instanceof`-ed
+     *  wechaty-puppet-xxx should put `wechaty-puppet` in `devDependencies` and `peerDependencies`.
+     */
     if (options.puppet instanceof Puppet) {
       puppetInstance = await this.resolveInstance(options.puppet)
+    } else if (typeof options.puppet !== 'string') {
+      log.error('PuppetManager', 'resolve() %s',
+        `
+        Wechaty Framework must keep only one Puppet instance #1930
+        See: https://github.com/wechaty/wechaty/issues/1930
+        `,
+      )
+      throw new Error('Wechaty Framework must keep only one Puppet instance #1930')
     } else {
       const MyPuppet = await this.resolveName(options.puppet)
       /**
@@ -55,7 +67,7 @@ export class PuppetManager {
        * For example: PuppetA allow `constructor()` but PuppetB requires `constructor(options)`
        *
        * SOLUTION: we enforce all the PuppetImplenmentation to have `options` and should not allow default parameter.
-       * Issue: https://github.com/Chatie/wechaty-puppet/issues/2
+       * Issue: https://github.com/wechaty/wechaty-puppet/issues/2
        */
       puppetInstance = new MyPuppet(options.puppetOptions)
     }
@@ -63,47 +75,36 @@ export class PuppetManager {
     return puppetInstance
   }
 
-  protected static async resolveName (puppetName: PuppetModuleName): Promise<PuppetImplementation> {
+  protected static async resolveName (
+    puppetName: PuppetModuleName,
+  ): Promise<PuppetImplementation> {
     log.verbose('PuppetManager', 'resolveName(%s)', puppetName)
 
     if (!puppetName) {
       throw new Error('must provide a puppet name')
     }
 
-    switch (puppetName) {
-      case 'padchat':
-        // issue #1496 https://github.com/Chatie/wechaty/issues/1496
-        // compatible old settings for padchat
-        puppetName = 'wechaty-puppet-padchat'
-        break
-
-      case 'mock':
-        puppetName = 'wechaty-puppet-mock'
-        break
-
-      case 'default':
-        puppetName = PUPPET_NAME_DEFAULT
-        break
-
-      default:
-        if (!(puppetName in PUPPET_DEPENDENCIES)) {
-          throw new Error(
-            [
-              '',
-              'puppet npm module not supported: "' + puppetName + '"',
-              'learn more about supported Wechaty Puppet from our directory at',
-              '<https://github.com/Chatie/wechaty-puppet/wiki/Directory>',
-              '',
-            ].join('\n')
-          )
-        }
-        break
+    if (!(puppetName in PUPPET_DEPENDENCIES)) {
+      throw new Error(
+        [
+          '',
+          'puppet npm module not supported: "' + puppetName + '"',
+          'learn more about supported Wechaty Puppet from our directory at',
+          '<https://github.com/wechaty/wechaty-puppet/wiki/Directory>',
+          '',
+        ].join('\n')
+      )
     }
 
     await this.checkModule(puppetName)
 
     const puppetModule = await import(puppetName)
-    const MyPuppet     = puppetModule.default as PuppetImplementation
+
+    if (!puppetModule.default) {
+      throw new Error(`Puppet(${puppetName}) has not provided the default export`)
+    }
+
+    const MyPuppet = puppetModule.default as PuppetImplementation
 
     return MyPuppet
   }
@@ -117,6 +118,7 @@ export class PuppetManager {
      * 1. Not Installed
      */
     if (!this.installed(puppetName)) {
+      log.silly('PuppetManager', 'checkModule(%s) not installed.', puppetName)
       await this.install(puppetName, versionRange)
       return
     }
@@ -133,10 +135,10 @@ export class PuppetManager {
      */
     if (!satisfy) {
       log.silly('PuppetManager', 'checkModule() %s installed version %s NOT satisfied range %s',
-                                  puppetName,
-                                  moduleVersion,
-                                  versionRange,
-                )
+        puppetName,
+        moduleVersion,
+        versionRange,
+      )
       await this.install(puppetName, versionRange)
       return
     }
@@ -145,11 +147,10 @@ export class PuppetManager {
      * 3. Installed and Version Satisfy
      */
     log.silly('PuppetManager', 'checkModule() %s installed version %s satisfied range %s',
-                                puppetName,
-                                moduleVersion,
-                                versionRange,
-              )
-    return
+      puppetName,
+      moduleVersion,
+      versionRange,
+    )
   }
 
   protected static getModuleVersion (moduleName: string): string {
@@ -158,7 +159,7 @@ export class PuppetManager {
         moduleName,
       ),
     )
-    const pkg     = readPkgUp.sync({ cwd: modulePath }).pkg
+    const pkg     = readPkgUp.sync({ cwd: modulePath })!.packageJson
     const version = pkg.version
 
     return version
@@ -187,11 +188,34 @@ export class PuppetManager {
     }
   }
 
+  private static async preInstallPuppeteer (): Promise<void> {
+    let gfw = false
+    try {
+      gfw = await inGfw()
+      if (gfw) {
+        log.verbose('PuppetManager', 'preInstallPuppeteer() inGfw = true')
+      }
+    } catch (e) {
+      log.verbose('PuppetManager', 'preInstallPuppeteer() exception: %s', e)
+    }
+
+    // https://github.com/GoogleChrome/puppeteer/issues/1597#issuecomment-351945645
+    if (gfw && !process.env.PUPPETEER_DOWNLOAD_HOST) {
+      log.info('PuppetManager', 'preInstallPuppeteer() set PUPPETEER_DOWNLOAD_HOST=https://npm.taobao.org/mirrors/')
+      process.env.PUPPETEER_DOWNLOAD_HOST = 'https://npm.taobao.org/mirrors/'
+    }
+  }
+
   public static async install (
-    puppetModule : string,
+    puppetModule: string,
     puppetVersion = 'latest',
   ): Promise<void> {
     log.info('PuppetManager', 'install(%s@%s) please wait ...', puppetModule, puppetVersion)
+
+    if (puppetModule === 'wechaty-puppet-puppeteer') {
+      await this.preInstallPuppeteer()
+    }
+
     await npm.install(
       `${puppetModule}@${puppetVersion}`,
       {
@@ -203,16 +227,26 @@ export class PuppetManager {
     log.info('PuppetManager', 'install(%s@%s) done', puppetModule, puppetVersion)
   }
 
+  /**
+   * Install all `wechaty-puppet-*` modules from `puppet-config.ts`
+   */
   public static async installAll (): Promise<void> {
     log.info('PuppetManager', 'installAll() please wait ...')
+
+    const skipList = [
+      '@juzibot/wechaty-puppet-donut',  // windows puppet
+    ]
 
     const moduleList: string[] = []
 
     for (const puppetModuleName of Object.keys(PUPPET_DEPENDENCIES)) {
-      const version = PUPPET_DEPENDENCIES[puppetModuleName as any as PuppetModuleName]
-      if (version !== '0.0.0') {
-        moduleList.push(`${puppetModuleName}@${version}`)
+      const version = PUPPET_DEPENDENCIES[puppetModuleName as PuppetModuleName]
+
+      if (version === '0.0.0' || skipList.includes(puppetModuleName)) {
+        continue
       }
+
+      moduleList.push(`${puppetModuleName}@${version}`)
     }
 
     await npm.install(
@@ -225,4 +259,5 @@ export class PuppetManager {
     )
 
   }
+
 }

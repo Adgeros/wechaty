@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 /**
- *   Wechaty - https://github.com/chatie/wechaty
+ *   Wechaty - https://github.com/wechaty/wechaty
  *
  *   @copyright 2016-2018 Huan LI <zixia@zixia.net>
  *
@@ -17,9 +17,6 @@
  *   limitations under the License.
  *
  */
-// tslint:disable:no-shadowed-variable
-// tslint:disable:max-classes-per-file
-
 import test  from 'blue-tape'
 // import sinon from 'sinon'
 
@@ -58,9 +55,7 @@ test('Two clone-ed classes have different static puppet value', async t => {
 
   class FixtureClass extends Accessory {}
 
-  // tslint:disable-next-line:variable-name
   const ClonedClass1 = cloneClass(FixtureClass)
-  // tslint:disable-next-line:variable-name
   const ClonedClass2 = cloneClass(FixtureClass)
 
   ClonedClass1.puppet = EXPECTED_PUPPET1
@@ -76,11 +71,9 @@ test('Two clone-ed classes have different static puppet value', async t => {
 test('Throw error when set the value again', async t => {
   class FixtureClass extends Accessory {}
 
-  const fixture = new FixtureClass()
+  t.doesNotThrow(() => { FixtureClass.wechaty = {} as any },  'instance: should not throw when set wechaty at 1st time')
+  t.throws(() => { FixtureClass.wechaty = {} as any },        'instance: should throw when set wechaty at 2nd time')
 
-  t.doesNotThrow(() => fixture.puppet = {} as any,  'instance: should not throw when set at 1st time')
-  t.throws(() => fixture.puppet = {} as any,        'instance: should throw when set at 2nd time')
-
-  t.doesNotThrow(() => FixtureClass.puppet = {} as any,  'static: should not throw when set at 1st time')
-  t.throws(() => FixtureClass.puppet = {} as any,        'static: should throw when set at 2nd time')
+  t.doesNotThrow(() => { FixtureClass.puppet = {} as any },  'static: should not throw when set puppet at 1st time')
+  t.throws(() => { FixtureClass.puppet = {} as any },        'static: should throw when set puppet at 2nd time')
 })

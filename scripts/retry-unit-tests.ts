@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 /**
- * https://github.com/Chatie/wechaty/issues/1084
+ * https://github.com/wechaty/wechaty/issues/1084
  * WebDriver / Puppeteer sometimes will fail(i.e. timeout) with no reason.
  * That will cause the unit tests fail randomly.
  * So we need to retry again when unit tests fail,
@@ -11,15 +11,15 @@ import { spawn } from 'child_process'
 const MAX_RETRY_NUM = 3
 
 async function main (): Promise<number> {
-  console.log('Safe Test: starting...')
+  console.info('Safe Test: starting...')
 
   let round = 0
   let succ = false
   do {
-    console.log(`Safe Test: running for round #${round}`)
+    console.info(`Safe Test: running for round #${round}`)
     succ = await unitTest()
     if (succ) { // success!
-      console.log(`Safe Test: successed at round #${round}!`)
+      console.info(`Safe Test: successed at round #${round}!`)
       return 0
     }
   } while (round++ < MAX_RETRY_NUM)
@@ -47,8 +47,8 @@ async function unitTest () {
 }
 
 main()
-.then(process.exit)
-.catch(e => {
-  console.error(e)
-  process.exit(1)
-})
+  .then(process.exit)
+  .catch(e => {
+    console.error(e)
+    process.exit(1)
+  })

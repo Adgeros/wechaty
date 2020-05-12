@@ -1,5 +1,5 @@
 /**
- *   Wechaty - https://github.com/chatie/wechaty
+ *   Wechaty - https://github.com/wechaty/wechaty
  *
  *   @copyright 2016-2018 Huan LI <zixia@zixia.net>
  *
@@ -22,6 +22,11 @@
  */
 import { StateSwitch }  from 'state-switch'
 
+import {
+  PuppetServer,
+  PuppetServerOptions,
+}                       from 'wechaty-puppet-hostie'
+
 import { Message }      from './user'
 
 import {
@@ -37,48 +42,79 @@ export interface IoClientOptions {
 
 export class IoClient {
 
-  private io: Io // XXX keep io `null-able` or not? 20161026
+  /**
+   * Huan(20161026): keep io `null-able` or not?
+   * Huan(202002): make it optional.
+   */
+  private io?: Io
+  private puppetServer?: PuppetServer
 
   private state: StateSwitch
 
   constructor (
     public options: IoClientOptions,
   ) {
-    log.verbose('IoClient', 'constructor(%s)', JSON.stringify(options))
+    log.verbose('IoClient', 'constructor({token: %s})',
+      options.token
+    )
 
-    this.state = new StateSwitch('IoClient', log)
+    this.state = new StateSwitch('IoClient', { log })
+  }
 
-    this.io = new Io({
-      token   : this.options.token,
-      wechaty : this.options.wechaty,
-    })
+  private async startHostie () {
+    log.verbose('IoClient', 'startHostie()')
 
+    if (this.puppetServer) {
+      throw new Error('hostie server exists')
+    }
+
+    const options: PuppetServerOptions = {
+      endpoint : '0.0.0.0:8788',
+      puppet   : this.options.wechaty.puppet,
+      token    : this.options.token,
+    }
+    this.puppetServer = new PuppetServer(options)
+    await this.puppetServer.start()
+  }
+
+  private async stopHostie () {
+    log.verbose('IoClient', 'stopHostie()')
+
+    if (!this.puppetServer) {
+      throw new Error('hostie server does not exist')
+    }
+
+    await this.puppetServer.stop()
+    this.puppetServer = undefined
   }
 
   public async start (): Promise<void> {
-    log.verbose('IoClient', 'init()')
+    log.verbose('IoClient', 'start()')
 
-    if (this.state.pending()) {
-      log.warn('IoClient', 'start() with a pending state, not the time')
-      const e = new Error('state.pending() when start()')
-      throw e
+    if (this.state.on()) {
+      log.warn('IoClient', 'start() with a on state, wait and return')
+      await this.state.ready('on')
+      return
     }
 
     this.state.on('pending')
 
     try {
+      await this.hookWechaty(this.options.wechaty)
 
       await this.startIo()
-      await this.hookWechaty(this.options.wechaty)
+
+      await this.options.wechaty.start()
+
+      await this.startHostie()
 
       this.state.on(true)
 
     } catch (e) {
-      log.error('IoClient', 'init() exception: %s', e.message)
+      log.error('IoClient', 'start() exception: %s', e.message)
       this.state.off(true)
       throw e
     }
-    return
   }
 
   private async hookWechaty (wechaty: Wechaty): Promise<void> {
@@ -91,12 +127,10 @@ export class IoClient {
     }
 
     wechaty
-    .on('login'	     , user => log.info('IoClient', `${user.name()} logined`))
-    .on('logout'	   , user => log.info('IoClient', `${user.name()} logouted`))
-    .on('scan', (url, code) => log.info('IoClient', `[${code}] ${url}`))
-    .on('message'     , msg => this.onMessage(msg))
-
-    return
+      .on('login',    user => log.info('IoClient', `${user.name()} logined`))
+      .on('logout',   user => log.info('IoClient', `${user.name()} logouted`))
+      .on('scan',     (url, code) => log.info('IoClient', `[${code}] ${url}`))
+      .on('message',  msg => this.onMessage(msg))
   }
 
   private async startIo (): Promise<void> {
@@ -108,36 +142,38 @@ export class IoClient {
       throw e
     }
 
+    if (this.io) {
+      throw new Error('io exists')
+    }
+
+    this.io = new Io({
+      token   : this.options.token,
+      wechaty : this.options.wechaty,
+    })
+
     try {
       await this.io.start()
     } catch (e) {
       log.verbose('IoClient', 'startIo() init fail: %s', e.message)
       throw e
     }
-
-    return
   }
 
-//   public initWeb (port = config.httpPort) {
-// //    if (process.env.DYNO) {
-// //    }
-//     const app = express()
+  private async stopIo () {
+    log.verbose('IoClient', 'stopIo()')
 
-//     app.get('/', (_ /* req */, res) => {
-//       res.send('Wechaty IO Bot Alive!')
-//     })
+    if (!this.io) {
+      log.warn('IoClient', 'stopIo() io does not exist')
+      return
+    }
 
-//     return new Promise((resolve) => {
-//       app.listen(port, () => {
-//         log.verbose('IoClient', 'initWeb() Wechaty IO Bot listening on port ' + port + '!')
+    await this.io.stop()
+    this.io = undefined
+  }
 
-//         return resolve(this)
+  private async onMessage (msg: Message) {
+    log.verbose('IoClient', 'onMessage(%s)', msg)
 
-//       })
-//     })
-//   }
-
-  private async onMessage (_: Message) {
     // const from = m.from()
     // const to = m.to()
     // const content = m.toString()
@@ -160,19 +196,14 @@ export class IoClient {
 
     this.state.off('pending')
 
-    // XXX
-    if (!this.io) {
-      log.warn('IoClient', 'stop() without this.io')
-      this.state.off(true)
-      return
-    }
+    await this.stopIo()
+    await this.stopHostie()
+    await this.options.wechaty.stop()
 
-    await this.io.stop()
     this.state.off(true)
 
     // XXX 20161026
     // this.io = null
-    return
   }
 
   public async restart (): Promise<void> {
@@ -185,7 +216,6 @@ export class IoClient {
       log.error('IoClient', 'restart() exception %s', e.message)
       throw e
     }
-    return
   }
 
   public async quit (): Promise<void> {
@@ -215,8 +245,6 @@ export class IoClient {
     } finally {
       this.state.off(true)
     }
-
-    return
-
   }
+
 }

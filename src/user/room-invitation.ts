@@ -1,5 +1,5 @@
 /**
- *   Wechaty - https://github.com/chatie/wechaty
+ *   Wechaty - https://github.com/wechaty/wechaty
  *
  *   @copyright 2016-2018 Huan LI <zixia@zixia.net>
  *
@@ -30,10 +30,14 @@ import {
 import {
   Acceptable,
 }               from '../types'
+import {
+  timestampToDate,
+}                   from '../helper-functions/pure/timestamp-to-date'
 
 import {
   Contact,
 }               from './contact'
+import { RoomInvitationPayload } from 'wechaty-puppet'
 
 /**
  *
@@ -50,21 +54,20 @@ export class RoomInvitation extends Accessory implements Acceptable {
   }
 
   /**
-   * @ignore
+   * @hideconstructor
    * Instance Properties
    *
    */
   constructor (
-    public id: string,
+    public readonly id: string,
   ) {
     super()
     log.verbose('RoomInvitation', 'constructor(id=%s)', id)
 
-    // tslint:disable-next-line:variable-name
     const MyClass = instanceToClass(this, RoomInvitation)
 
     if (MyClass === RoomInvitation) {
-      throw new Error('RoomInvitation class can not be instanciated directly! See: https://github.com/Chatie/wechaty/issues/1217')
+      throw new Error('RoomInvitation class can not be instanciated directly! See: https://github.com/wechaty/wechaty/issues/1217')
     }
 
     if (!this.puppet) {
@@ -75,12 +78,12 @@ export class RoomInvitation extends Accessory implements Acceptable {
   public toString () {
     return [
       'RoomInvitation#',
-      this.id || 'loading'
+      this.id || 'loading',
     ].join('')
   }
 
   /**
-   * @ignore
+    * @ignore
    */
   public async toStringAsync (): Promise<string> {
     const payload = await this.puppet.roomInvitationPayload(this.id)
@@ -88,7 +91,7 @@ export class RoomInvitation extends Accessory implements Acceptable {
       'RoomInvitation#',
       this.id,
       '<',
-      payload.roomTopic,
+      payload.topic,
       ',',
       payload.inviterId,
       '>',
@@ -124,15 +127,15 @@ export class RoomInvitation extends Accessory implements Acceptable {
       await inviter.ready()
 
       log.verbose('RoomInvitation', 'accept() with room(%s) & inviter(%s) ready()',
-                                    topic,
-                                    inviter,
-                  )
+        topic,
+        inviter,
+      )
       return
     } catch (e) {
       log.warn('RoomInvitation', 'accept() inviter(%s) is not ready because of %s',
-                                  inviter,
-                                  e && e.message || e,
-              )
+        inviter,
+        (e && e.message) || e,
+      )
     }
   }
 
@@ -171,32 +174,48 @@ export class RoomInvitation extends Accessory implements Acceptable {
    */
   public async topic (): Promise<string> {
     const payload = await this.puppet.roomInvitationPayload(this.id)
-    return payload.roomTopic
+
+    // roomTopic deprecated. use topic instead:
+    return payload.topic || payload.topic || ''
   }
 
   /**
    * @deprecated: use topic() instead
+   * @ignore
    */
   public async roomTopic (): Promise<string> {
     return this.topic()
   }
 
-  public async roomMemberCount (): Promise<number> {
-    log.verbose('RoomInvitation', 'roomMemberCount()')
+  public async memberCount (): Promise<number> {
+    log.verbose('RoomInvitation', 'memberCount()')
 
     const payload = await this.puppet.roomInvitationPayload(this.id)
-    return payload.roomMemberCount
+
+    // roomMemberCount deprecated. use memberCount instead:
+    return payload.memberCount || payload.memberCount || 0
+  }
+
+  /**
+   * @deprecated: use memberCount() instead
+   * @ignore
+   */
+  public async roomMemberCount (): Promise<number> {
+    log.warn('RoomInvitation', 'roomMemberCount() DEPRECATED. use memberCount() instead.')
+    return this.memberCount()
   }
 
   /**
    * List of Room Members that you known(is friend)
-   * @ignore
+    * @ignore
    */
-  public async roomMemberList (): Promise<Contact[]> {
+  public async memberList (): Promise<Contact[]> {
     log.verbose('RoomInvitation', 'roomMemberList()')
 
     const payload = await this.puppet.roomInvitationPayload(this.id)
-    const contactIdList = payload.roomMemberIdList
+
+    // roomMemberIdList deprecated. use memberIdList isntead.
+    const contactIdList = payload.memberIdList || payload.memberIdList || []
 
     const contactList = contactIdList.map(
       id => this.wechaty.Contact.load(id),
@@ -211,6 +230,15 @@ export class RoomInvitation extends Accessory implements Acceptable {
   }
 
   /**
+   * @deprecated: use memberList() instead.
+   * @ignore
+   */
+  public async roomMemberList (): Promise<Contact[]> {
+    log.warn('RoomInvitation', 'roomMemberList() DEPRECATED. use memberList() instead.')
+    return this.roomMemberList()
+  }
+
+  /**
    * Get the invitation time
    *
    * @returns {Promise<Date>}
@@ -219,9 +247,7 @@ export class RoomInvitation extends Accessory implements Acceptable {
     log.verbose('RoomInvitation', 'date()')
 
     const payload = await this.puppet.roomInvitationPayload(this.id)
-    // convert the unit timestamp to milliseconds
-    // (from seconds to milliseconds)
-    return new Date(1000 * payload.timestamp)
+    return timestampToDate(payload.timestamp)
   }
 
   /**
@@ -239,6 +265,53 @@ export class RoomInvitation extends Accessory implements Acceptable {
     const ageSeconds = Math.floor(ageMilliseconds / 1000)
 
     return ageSeconds
+  }
+
+  /**
+   * Load the room invitation info from disk
+   *
+   * @returns {RoomInvitation}
+   * @example
+   * const bot = new Wechaty()
+   * const dataFromDisk // get the room invitation info data from disk
+   * const roomInvitation = await bot.RoomInvitation.fromJSON(dataFromDisk)
+   * await roomInvitation.accept()
+   */
+  public static async fromJSON (
+    payload: string | RoomInvitationPayload,
+  ): Promise<RoomInvitation> {
+    log.verbose('RoomInvitation', 'fromJSON(%s)',
+      typeof payload === 'string'
+        ? payload
+        : JSON.stringify(payload),
+    )
+
+    if (typeof payload === 'string') {
+      payload = JSON.parse(payload) as RoomInvitationPayload
+    }
+
+    await this.puppet.roomInvitationPayload(payload.id, payload)
+
+    return this.wechaty.RoomInvitation.load(payload.id)
+  }
+
+  /**
+   * Get the room invitation info when listened on room-invite event
+   *
+   * @returns {string}
+   * @example
+   * const bot = new Wechaty()
+   * bot.on('room-invite', async roomInvitation => {
+   *  const roomInvitation = bot.RoomInvitation.load(roomInvitation.id)
+   *  const jsonData = await roomInvitation.toJSON(roomInvitation.id)
+   *  // save the json data to disk, and we can use it by RoomInvitation.fromJSON()
+   * }
+   * .start()
+   */
+  public async toJSON (): Promise<string> {
+    log.verbose('RoomInvitation', 'toJSON()')
+    const payload = await this.puppet.roomInvitationPayload(this.id)
+    return JSON.stringify(payload)
   }
 
 }

@@ -1,6 +1,5 @@
 #!/usr/bin/env ts-node
 
-// tslint:disable:no-shadowed-variable
 import test  from 'blue-tape'
 
 import { Io }       from './io'
@@ -8,7 +7,8 @@ import { Wechaty }  from './wechaty'
 
 test('Io restart without problem', async t => {
   const io = new Io({
-    token   : 'mock_token',
+    // token must not contain any white spaces
+    token   : 'mock_token_in_wechaty/wechaty/src/io.spec.ts',
     wechaty : new Wechaty(),
   })
 

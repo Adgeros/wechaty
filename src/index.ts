@@ -1,6 +1,9 @@
 export {
+  ScanStatus,
+  UrlLinkPayload,
   FileBox,
-}           from 'file-box'
+  MemoryCard,
+}                 from 'wechaty-puppet'
 
 export {
   config,
@@ -16,22 +19,32 @@ export {
 export {
   Wechaty,
   WechatyOptions,
+  WechatyPlugin,
 }                     from './wechaty'
 
 export {
+  PuppetModuleName,
+}                     from './puppet-config'
+
+export {
   Contact,
+  Tag,
   Friendship,
   Favorite,
   Message,
+  Image,
   Moment,
   Money,
   Room,
   RoomInvitation,
   UrlLink,
+  MiniProgram,
 }                         from './user'
 
 export {
-  MediaMessage,
-}                     from './deprecated'
+}                         from './deprecated'
 
 export { IoClient }   from './io-client'
+export {
+  Sayable,
+}                   from './types'

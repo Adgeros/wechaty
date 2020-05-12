@@ -1,5 +1,5 @@
 /**
- *   Wechaty - https://github.com/chatie/wechaty
+ *   Wechaty - https://github.com/wechaty/wechaty
  *
  *   @copyright 2016-2018 Huan LI <zixia@zixia.net>
  *
@@ -20,16 +20,14 @@
 import {
   instanceToClass,
 }                   from 'clone-class'
-import {
-  FileBox,
-}                   from 'file-box'
 
 import {
   Accessory,
 }                       from '../accessory'
 import {
-  // config,
   FOUR_PER_EM_SPACE,
+  FileBox,
+
   log,
   Raven,
 }                       from '../config'
@@ -37,17 +35,15 @@ import {
   Sayable,
 }                       from '../types'
 
+import {
+  guardQrCodeValue,
+}                       from '../helper-functions/pure/guard-qr-code-value'
+
 import { Contact }        from './contact'
+import { MiniProgram }    from './mini-program'
+import { Message }        from './message'
 import { RoomInvitation } from './room-invitation'
 import { UrlLink }        from './url-link'
-
-export const ROOM_EVENT_DICT = {
-  invite: 'tbw',
-  join: 'tbw',
-  leave: 'tbw',
-  topic: 'tbw',
-}
-export type RoomEventName = keyof typeof ROOM_EVENT_DICT
 
 import {
   RoomMemberQueryFilter,
@@ -55,13 +51,20 @@ import {
   RoomQueryFilter,
 }                         from 'wechaty-puppet'
 
+export const ROOM_EVENT_DICT = {
+  invite: 'tbw',
+  join: 'tbw',
+  leave: 'tbw',
+  message: 'message that received in this room',
+  topic: 'tbw',
+}
+export type RoomEventName = keyof typeof ROOM_EVENT_DICT
+
 /**
- * All wechat rooms(groups) will be encapsulated as a Room.
+ * All WeChat rooms(groups) will be encapsulated as a Room.
  *
- * [Examples/Room-Bot]{@link https://github.com/Chatie/wechaty/blob/1523c5e02be46ebe2cc172a744b2fbe53351540e/examples/room-bot.ts}
+ * [Examples/Room-Bot]{@link https://github.com/wechaty/wechaty/blob/1523c5e02be46ebe2cc172a744b2fbe53351540e/examples/room-bot.ts}
  *
- * @property {string}  id               - Get Room id.
- * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/Chatie/wechaty/wiki/Puppet#3-puppet-compatible-table)
  */
 export class Room extends Accessory implements Sayable {
 
@@ -74,9 +77,9 @@ export class Room extends Accessory implements Sayable {
    * @param {Contact[]} contactList
    * @param {string} [topic]
    * @returns {Promise<Room>}
-   * @example <caption>Creat a room with 'lijiarui' and 'juxiaomi', the room topic is 'ding - created'</caption>
-   * const helperContactA = await Contact.find({ name: 'lijiarui' })  // change 'lijiarui' to any contact in your wechat
-   * const helperContactB = await Contact.find({ name: 'juxiaomi' })  // change 'juxiaomi' to any contact in your wechat
+   * @example <caption>Creat a room with 'lijiarui' and 'huan', the room topic is 'ding - created'</caption>
+   * const helperContactA = await Contact.find({ name: 'lijiarui' })  // change 'lijiarui' to any contact in your WeChat
+   * const helperContactB = await Contact.find({ name: 'huan' })  // change 'huan' to any contact in your WeChat
    * const contactList = [helperContactA, helperContactB]
    * console.log('Bot', 'contactList: %s', contactList.join(','))
    * const room = await Room.create(contactList, 'ding')
@@ -87,8 +90,8 @@ export class Room extends Accessory implements Sayable {
   public static async create (contactList: Contact[], topic?: string): Promise<Room> {
     log.verbose('Room', 'create(%s, %s)', contactList.join(','), topic)
 
-    if (   !contactList
-        || !Array.isArray(contactList)
+    if (!contactList
+      || !Array.isArray(contactList)
     ) {
       throw new Error('contactList not found')
     }
@@ -103,7 +106,7 @@ export class Room extends Accessory implements Sayable {
       const room = this.load(roomId)
       return room
     } catch (e) {
-      log.error('Room', 'create() exception: %s', e && e.stack || e.message || e)
+      log.error('Room', 'create() exception: %s', (e && e.stack) || e.message || e)
       Raven.captureException(e)
       throw e
     }
@@ -134,10 +137,6 @@ export class Room extends Accessory implements Sayable {
   ): Promise<Array<T['prototype']>> {
     log.verbose('Room', 'findAll(%s)', JSON.stringify(query) || '')
 
-    if (query && !query.topic) {
-      throw new Error('topicFilter not found')
-    }
-
     const invalidDict: { [id: string]: true } = {}
 
     try {
@@ -146,10 +145,10 @@ export class Room extends Accessory implements Sayable {
       await Promise.all(
         roomList.map(
           room => room.ready()
-                      .catch(e => {
-                        log.warn('Room', 'findAll() room.ready() rejection: %s', e)
-                        invalidDict[room.id] = true
-                      })
+            .catch(e => {
+              log.warn('Room', 'findAll() room.ready() rejection: %s', e)
+              invalidDict[room.id] = true
+            })
         ),
       )
 
@@ -202,20 +201,20 @@ export class Room extends Accessory implements Sayable {
     for (n = 0; n < roomList.length; n++) {
       const room = roomList[n]
       // use puppet.roomValidate() to confirm double confirm that this roomId is valid.
-      // https://github.com/lijiarui/wechaty-puppet-padchat/issues/64
-      // https://github.com/Chatie/wechaty/issues/1345
+      // https://github.com/wechaty/wechaty-puppet-padchat/issues/64
+      // https://github.com/wechaty/wechaty/issues/1345
       const valid = await this.puppet.roomValidate(room.id)
       if (valid) {
-        log.verbose('Room', 'find() confirm room[#%d] with id=%d is vlaid result, return it.',
-                            n,
-                            room.id,
-                  )
+        log.verbose('Room', 'find() confirm room[#%d] with id=%d is valid result, return it.',
+          n,
+          room.id,
+        )
         return room
       } else {
         log.verbose('Room', 'find() confirm room[#%d] with id=%d is INVALID result, try next',
-                            n,
-                            room.id,
-                    )
+          n,
+          room.id,
+        )
       }
     }
     log.warn('Room', 'find() got %d rooms but no one is valid.', roomList.length)
@@ -223,7 +222,7 @@ export class Room extends Accessory implements Sayable {
   }
 
   /**
-   * @private
+   * @ignore
    * About the Generic: https://stackoverflow.com/q/43003970/1123955
    *
    * Load room by topic. <br>
@@ -231,7 +230,7 @@ export class Room extends Accessory implements Sayable {
    * but for other solutions besides web,
    * we can get unique and permanent topic id.
    *
-   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/Chatie/wechaty/wiki/Puppet#3-puppet-compatible-table)
+   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/wechaty/wechaty/wiki/Puppet#3-puppet-compatible-table)
    * @static
    * @param {string} id
    * @returns {Room}
@@ -261,7 +260,7 @@ export class Room extends Accessory implements Sayable {
   }
 
   /**
-   * @private
+   * @ignore
    *
    * Instance Properties
    *
@@ -269,44 +268,41 @@ export class Room extends Accessory implements Sayable {
    */
   protected payload?: RoomPayload
 
-  public readonly id: string  // Room Id
-
   /**
-   * @private
+   * @hideconstructor
+   * @property {string}  id - Room id.
+   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/wechaty/wechaty/wiki/Puppet#3-puppet-compatible-table)
    */
   constructor (
-    id: string,
+    public readonly id: string,
   ) {
     super()
     log.silly('Room', `constructor(${id})`)
 
-    this.id = id
-
-    // tslint:disable-next-line:variable-name
     const MyClass = instanceToClass(this, Room)
 
     if (MyClass === Room) {
-      throw new Error('Room class can not be instanciated directly! See: https://github.com/Chatie/wechaty/issues/1217')
+      throw new Error('Room class can not be instantiated directly! See: https://github.com/wechaty/wechaty/issues/1217')
     }
 
     if (!this.puppet) {
-      throw new Error('Room class can not be instanciated without a puppet!')
+      throw new Error('Room class can not be instantiated without a puppet!')
     }
 
   }
 
   /**
-   * @private
+   * @ignore
    */
   public toString () {
     if (!this.payload) {
       return this.constructor.name
     }
 
-    return `Room<${this.payload.topic || 'loadind...'}>`
+    return `Room<${this.payload.topic || 'loading...'}>`
   }
 
-  public async *[Symbol.asyncIterator] (): AsyncIterableIterator<Contact> {
+  public async * [Symbol.asyncIterator] (): AsyncIterableIterator<Contact> {
     const memberList = await this.memberList()
     for (const contact of memberList) {
       yield contact
@@ -314,8 +310,8 @@ export class Room extends Accessory implements Sayable {
   }
 
   /**
+    * @ignore
    * @ignore
-   * @private
    * @deprecated: Use `sync()` instead
    */
   public async refresh (): Promise<void> {
@@ -323,7 +319,7 @@ export class Room extends Accessory implements Sayable {
   }
 
   /**
-   * Force reload data for Room, Sync data from lowlevel API again.
+   * Force reload data for Room, Sync data from puppet API again.
    *
    * @returns {Promise<void>}
    * @example
@@ -339,7 +335,7 @@ export class Room extends Accessory implements Sayable {
    * Please not to use `ready()` at the user land.
    * If you want to sync data, use `sync()` instead.
    *
-   * @private
+   * @ignore
    */
   public async ready (
     forceSync = false,
@@ -375,29 +371,30 @@ export class Room extends Accessory implements Sayable {
   }
 
   /**
-   * @private
+   * @ignore
    */
   public isReady (): boolean {
     return !!(this.payload)
   }
 
-  public say (text: string)                     : Promise<void>
-  public say (text: string, mention: Contact)   : Promise<void>
-  public say (text: string, mention: Contact[]) : Promise<void>
-  public say (file: FileBox)                    : Promise<void>
-  public say (url: UrlLink)                     : Promise<void>
+  public say (text:     string)                                  : Promise<void | Message>
+  public say (text:     string, ...mentionList: Contact[])       : Promise<void | Message>
+  public say (textList: TemplateStringsArray, ...varList: any[]) : Promise<void | Message>
+  public say (file:     FileBox)                                 : Promise<void | Message>
+  public say (url:      UrlLink)                                 : Promise<void | Message>
+  public say (mini:     MiniProgram)                             : Promise<void | Message>
 
   public say (...args: never[]): never
 
   /**
    * Send message inside Room, if set [replyTo], wechaty will mention the contact as well.
    * > Tips:
-   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/Chatie/wechaty/wiki/Puppet#3-puppet-compatible-table)
+   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/wechaty/wechaty/wiki/Puppet#3-puppet-compatible-table)
    *
-   * @param {(string | Contact | FileBox)} textOrContactOrFileOrUrl - Send `text` or `media file` inside Room. <br>
+   * @param {(string | Contact | FileBox)} textOrContactOrFileOrUrlOrMini - Send `text` or `media file` inside Room. <br>
    * You can use {@link https://www.npmjs.com/package/file-box|FileBox} to send file
    * @param {(Contact | Contact[])} [mention] - Optional parameter, send content inside Room, and mention @replyTo contact or contactList.
-   * @returns {Promise<void>}
+   * @returns {Promise<void | Message>}
    *
    * @example
    * const bot = new Wechaty()
@@ -408,87 +405,244 @@ export class Room extends Accessory implements Sayable {
    * // 1. Send text inside Room
    *
    * await room.say('Hello world!')
+   * const msg = await room.say('Hello world!') // only supported by puppet-padplus
    *
    * // 2. Send media file inside Room
-   * import { FileBox }  from 'file-box'
+   * import { FileBox }  from 'wechaty'
    * const fileBox1 = FileBox.fromUrl('https://chatie.io/wechaty/images/bot-qr-code.png')
    * const fileBox2 = FileBox.fromLocal('/tmp/text.txt')
    * await room.say(fileBox1)
+   * const msg1 = await room.say(fileBox1) // only supported by puppet-padplus
    * await room.say(fileBox2)
+   * const msg2 = await room.say(fileBox2) // only supported by puppet-padplus
    *
    * // 3. Send Contact Card in a room
    * const contactCard = await bot.Contact.find({name: 'lijiarui'}) // change 'lijiarui' to any of the room member
    * await room.say(contactCard)
+   * const msg = await room.say(contactCard) // only supported by puppet-padplus
    *
    * // 4. Send text inside room and mention @mention contact
    * const contact = await bot.Contact.find({name: 'lijiarui'}) // change 'lijiarui' to any of the room member
    * await room.say('Hello world!', contact)
+   * const msg = await room.say('Hello world!', contact) // only supported by puppet-padplus
+   *
+   * // 5. Send text inside room and mention someone with Tagged Template
+   * const contact2 = await bot.Contact.find({name: 'zixia'}) // change 'zixia' to any of the room member
+   * await room.say`Hello ${contact}, here is the world ${contact2}`
+   * const msg = await room.say`Hello ${contact}, here is the world ${contact2}` // only supported by puppet-padplus
+   *
+   * // 6. send url link in a room
+   *
+   * const urlLink = new UrlLink ({
+   *   description : 'WeChat Bot SDK for Individual Account, Powered by TypeScript, Docker, and Love',
+   *   thumbnailUrl: 'https://avatars0.githubusercontent.com/u/25162437?s=200&v=4',
+   *   title       : 'Welcome to Wechaty',
+   *   url         : 'https://github.com/wechaty/wechaty',
+   * })
+   * await room.say(urlLink)
+   * const msg = await room.say(urlLink) // only supported by puppet-padplus
+   *
+   * // 7. send mini program in a room
+   *
+   * const miniProgram = new MiniProgram ({
+   *   username           : 'gh_xxxxxxx',     //get from mp.weixin.qq.com
+   *   appid              : '',               //optional, get from mp.weixin.qq.com
+   *   title              : '',               //optional
+   *   pagepath           : '',               //optional
+   *   description        : '',               //optional
+   *   thumbnailurl       : '',               //optional
+   * })
+   * await room.say(miniProgram)
+   * const msg = await room.say(miniProgram) // only supported by puppet-padplus
    */
   public async say (
-    textOrContactOrFileOrUrl : string | Contact | FileBox | UrlLink,
-    mention?                 : Contact | Contact[],
-  ): Promise<void> {
-
-    let replyToList: Contact[] = []
-    replyToList = replyToList.concat(mention || [])
-
-    const mentionAliasList = await Promise.all(
-                                      replyToList.map(
-                                        async c => await this.alias(c) || c.name()
-                                      )
-                                    )
+    something : string
+              | Contact
+              | FileBox
+              | MiniProgram
+              | TemplateStringsArray
+              | UrlLink,
+    ...varList : unknown[]
+  ): Promise<void | Message> {
 
     log.verbose('Room', 'say(%s, %s)',
-                        textOrContactOrFileOrUrl,
-                        mentionAliasList.join(', '),
-                )
+      something,
+      varList.join(', '),
+    )
 
     let text: string
+    let msgId: string | void
 
-    if (typeof textOrContactOrFileOrUrl === 'string') {
-
-      if (mentionAliasList.length > 0) {
-        // const AT_SEPRATOR = String.fromCharCode(8197)
-        const AT_SEPRATOR = FOUR_PER_EM_SPACE
-        const mentionList = mentionAliasList.map(roomAlias => '@' + roomAlias).join(AT_SEPRATOR)
-
-        text = mentionList + ' ' + textOrContactOrFileOrUrl
-      } else {
-        text = textOrContactOrFileOrUrl
-      }
-      const receiver = {
-        contactId : replyToList.length && replyToList[0].id || undefined,
-        roomId    : this.id,
-      }
-      await this.puppet.messageSendText(
-        receiver,
-        text,
-        replyToList.map(c => c.id),
+    /**
+     *
+     * 0. TemplateStringArray
+     *
+     */
+    if (something instanceof Array) {
+      const msgId = await this.sayTemplateStringsArray(
+        something as TemplateStringsArray,
+        ...varList,
       )
-    } else if (textOrContactOrFileOrUrl instanceof FileBox) {
-      await this.puppet.messageSendFile({
-        roomId: this.id,
-      }, textOrContactOrFileOrUrl)
-    } else if (textOrContactOrFileOrUrl instanceof Contact) {
-      await this.puppet.messageSendContact({
-        roomId: this.id,
-      }, textOrContactOrFileOrUrl.id)
-    } else if (textOrContactOrFileOrUrl instanceof UrlLink) {
+
+      if (!msgId) {
+        return
+      }
+
+      const msg = this.wechaty.Message.load(msgId)
+      await msg.ready()
+      return msg
+    }
+
+    /**
+     *
+     * Other conditions
+     *
+     */
+    if (typeof something === 'string') {
+      /**
+       * 1. string
+       */
+      let mentionList: Contact[] = []
+
+      if (varList.length > 0) {
+
+        const allIsContact = varList.every(c => c instanceof Contact)
+        if (!allIsContact) {
+          throw new Error('mentionList must be contact when not using TemplateStringArray function call.')
+        }
+
+        mentionList = [...varList as any]
+
+        const AT_SEPARATOR = FOUR_PER_EM_SPACE
+        const mentionAlias = await Promise.all(mentionList.map(async contact =>
+          '@' + (await this.alias(contact) || contact.name())
+        ))
+        const mentionText = mentionAlias.join(AT_SEPARATOR)
+
+        text = mentionText + ' ' + something
+      } else {
+        text = something
+      }
+      // const receiver = {
+      //   contactId : (mentionList.length && mentionList[0].id) || undefined,
+      //   roomId    : this.id,
+      // }
+      msgId = await this.puppet.messageSendText(
+        this.id,
+        text,
+        mentionList.map(c => c.id),
+      )
+    } else if (something instanceof FileBox) {
+      /**
+       * 2. File Message
+       */
+      msgId = await this.puppet.messageSendFile(
+        this.id,
+        something,
+      )
+    } else if (something instanceof Contact) {
+      /**
+       * 3. Contact Card
+       */
+      msgId = await this.puppet.messageSendContact(
+        this.id,
+        something.id,
+      )
+    } else if (something instanceof UrlLink) {
       /**
        * 4. Link Message
        */
-      await this.puppet.messageSendUrl({
-        contactId : this.id
-      }, textOrContactOrFileOrUrl.payload)
+      msgId = await this.puppet.messageSendUrl(
+        this.id,
+        something.payload,
+      )
+    } else if (something instanceof MiniProgram) {
+      /**
+       * 5. Mini Program
+       */
+      msgId = await this.puppet.messageSendMiniProgram(
+        this.id,
+        something.payload,
+      )
     } else {
-      throw new Error('arg unsupported: ' + textOrContactOrFileOrUrl)
+      throw new Error('arg unsupported: ' + something)
+    }
+
+    if (msgId) {
+      const msg = this.wechaty.Message.load(msgId)
+      await msg.ready()
+      return msg
     }
   }
 
-  public emit (event: 'invite',inviter: Contact, invitation: RoomInvitation)                 : boolean
-  public emit (event: 'leave', leaverList:   Contact[],  remover?: Contact)                    : boolean
-  public emit (event: 'join' , inviteeList:  Contact[] , inviter:  Contact)                    : boolean
-  public emit (event: 'topic', topic:        string,     oldTopic: string,   changer: Contact) : boolean
+  private async sayTemplateStringsArray (
+    textList: TemplateStringsArray,
+    ...varList: unknown[]
+  ) {
+    const mentionList: Contact[] = varList.filter(v => v instanceof Contact) as any
+    // const receiver = {
+    //   contactId : (mentionList.length && mentionList[0].id) || undefined,
+    //   roomId    : this.id,
+    // }
+    if (varList.length === 0) {
+      /**
+       * No mention in the string
+       */
+      return this.puppet.messageSendText(
+        this.id,
+        textList[0],
+      )
+    // TODO(huan) 20191222 it seems the following code will not happen,
+    //            because it's equal the mentionList.length === 0 situation?
+    //
+    // XXX(huan) 20200101: See issue https://github.com/wechaty/wechaty/issues/1893
+    //           This is an anti-pattern usage.
+    //
+    // } else if (textList.length === 1) {
+    //   /**
+    //    * Constructed mention string, skip inserting @ signs
+    //    */
+    //   return this.puppet.messageSendText(
+    //     receiver,
+    //     textList[0],
+    //     mentionList.map(c => c.id),
+    //   )
+    } else {  // mentionList.length > 0
+      /**
+       * Mention in the string
+       */
+      const textListLength = textList.length
+      const varListLength  = varList.length
+      if (textListLength - varListLength !== 1) {
+        throw new Error('Can not say message, invalid Template String Array.')
+      }
+      let finalText = ''
+
+      let i = 0
+      for (; i < varListLength; i++) {
+        if (varList[i] instanceof Contact) {
+          const mentionContact: Contact = varList[i] as any
+          const mentionName = await this.alias(mentionContact) || mentionContact.name()
+          finalText += textList[i] + '@' + mentionName
+        } else {
+          finalText += textList[i] + varList[i]
+        }
+      }
+      finalText += textList[i]
+
+      return this.puppet.messageSendText(
+        this.id,
+        finalText,
+        mentionList.map(c => c.id),
+      )
+    }
+  }
+
+  public emit (event: 'invite',  inviter:       Contact,         invitation: RoomInvitation)                  : boolean
+  public emit (event: 'leave',   leaverList:    Contact[],  remover:  Contact, date: Date)                    : boolean
+  public emit (event: 'message', message:       Message)                                                      : boolean
+  public emit (event: 'join',    inviteeList:   Contact[],  inviter:  Contact, date: Date)                    : boolean
+  public emit (event: 'topic',   topic:         string,     oldTopic: string,  changer: Contact, date: Date)  : boolean
   public emit (event: never, ...args: never[]): never
 
   public emit (
@@ -498,20 +652,21 @@ export class Room extends Accessory implements Sayable {
     return super.emit(event, ...args)
   }
 
-  public on (event: 'invite', listener: (this: Room, inviter: Contact, invitation: RoomInvitation) => void)              : this
-  public on (event: 'leave', listener: (this: Room, leaverList:  Contact[], remover?: Contact) => void)                  : this
-  public on (event: 'join' , listener: (this: Room, inviteeList: Contact[], inviter:  Contact) => void)                  : this
-  public on (event: 'topic', listener: (this: Room, topic:       string,    oldTopic: string, changer: Contact) => void) : this
-  public on (event: never,   ...args: never[])                                                                           : never
+  public on (event: 'invite',  listener: (this: Room, inviter: Contact, invitation: RoomInvitation) => void)               : this
+  public on (event: 'leave',   listener: (this: Room, leaverList:  Contact[], remover?:  Contact, date?: Date) => void)                   : this
+  public on (event: 'message', listener: (this: Room, message:  Message, date?: Date) => void)                             : this
+  public on (event: 'join',    listener: (this: Room, inviteeList: Contact[], inviter:  Contact,  date?: Date) => void)                   : this
+  public on (event: 'topic',   listener: (this: Room, topic:       string,    oldTopic: string,   changer: Contact, date?: Date) => void) : this
+  public on (event: never,   ...args: never[])                                                                            : never
 
-   /**
-    * @desc       Room Class Event Type
-    * @typedef    RoomEventName
-    * @property   {string}  join  - Emit when anyone join any room.
-    * @property   {string}  topic - Get topic event, emitted when someone change room topic.
-    * @property   {string}  leave - Emit when anyone leave the room.<br>
-    *                               If someone leaves the room by themselves, wechat will not notice other people in the room, so the bot will never get the "leave" event.
-    */
+  /**
+   * @desc       Room Class Event Type
+   * @typedef    RoomEventName
+   * @property   {string}  join  - Emit when anyone join any room.
+   * @property   {string}  topic - Get topic event, emitted when someone change room topic.
+   * @property   {string}  leave - Emit when anyone leave the room.<br>
+   *                               If someone leaves the room by themselves, WeChat will not notice other people in the room, so the bot will never get the "leave" event.
+   */
 
   /**
    * @desc       Room Class Event Function
@@ -531,7 +686,7 @@ export class Room extends Accessory implements Sayable {
    * const bot = new Wechaty()
    * await bot.start()
    * // after logged in...
-   * const room = await bot.Room.find({topic: 'topic of your room'}) // change `event-room` to any room topic in your wechat
+   * const room = await bot.Room.find({topic: 'topic of your room'}) // change `event-room` to any room topic in your WeChat
    * if (room) {
    *   room.on('join', (room, inviteeList, inviter) => {
    *     const nameList = inviteeList.map(c => c.name()).join(',')
@@ -543,7 +698,7 @@ export class Room extends Accessory implements Sayable {
    * const bot = new Wechaty()
    * await bot.start()
    * // after logged in...
-   * const room = await bot.Room.find({topic: 'topic of your room'}) // change `event-room` to any room topic in your wechat
+   * const room = await bot.Room.find({topic: 'topic of your room'}) // change `event-room` to any room topic in your WeChat
    * if (room) {
    *   room.on('leave', (room, leaverList) => {
    *     const nameList = leaverList.map(c => c.name()).join(',')
@@ -551,11 +706,22 @@ export class Room extends Accessory implements Sayable {
    *   })
    * }
    *
+   * @example <caption>Event:message </caption>
+   * const bot = new Wechaty()
+   * await bot.start()
+   * // after logged in...
+   * const room = await bot.Room.find({topic: 'topic of your room'}) // change `event-room` to any room topic in your WeChat
+   * if (room) {
+   *   room.on('message', (message) => {
+   *     console.log(`Room received new message: ${message}`)
+   *   })
+   * }
+   *
    * @example <caption>Event:topic </caption>
    * const bot = new Wechaty()
    * await bot.start()
    * // after logged in...
-   * const room = await bot.Room.find({topic: 'topic of your room'}) // change `event-room` to any room topic in your wechat
+   * const room = await bot.Room.find({topic: 'topic of your room'}) // change `event-room` to any room topic in your WeChat
    * if (room) {
    *   room.on('topic', (room, topic, oldTopic, changer) => {
    *     console.log(`Room topic changed from ${oldTopic} to ${topic} by ${changer.name()}`)
@@ -566,7 +732,7 @@ export class Room extends Accessory implements Sayable {
    * const bot = new Wechaty()
    * await bot.start()
    * // after logged in...
-   * const room = await bot.Room.find({topic: 'topic of your room'}) // change `event-room` to any room topic in your wechat
+   * const room = await bot.Room.find({topic: 'topic of your room'}) // change `event-room` to any room topic in your WeChat
    * if (room) {
    *   room.on('invite', roomInvitation => roomInvitation.accept())
    * }
@@ -583,9 +749,9 @@ export class Room extends Accessory implements Sayable {
    * Add contact in a room
    *
    * > Tips:
-   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/Chatie/wechaty/wiki/Puppet#3-puppet-compatible-table)
+   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/wechaty/wechaty/wiki/Puppet#3-puppet-compatible-table)
    * >
-   * > see {@link https://github.com/Chatie/wechaty/issues/1441|Web version of WeChat closed group interface}
+   * > see {@link https://github.com/wechaty/wechaty/issues/1441|Web version of WeChat closed group interface}
    *
    * @param {Contact} contact
    * @returns {Promise<void>}
@@ -593,8 +759,8 @@ export class Room extends Accessory implements Sayable {
    * const bot = new Wechaty()
    * await bot.start()
    * // after logged in...
-   * const contact = await bot.Contact.find({name: 'lijiarui'}) // change 'lijiarui' to any contact in your wechat
-   * const room = await bot.Room.find({topic: 'wechat'})        // change 'wechat' to any room topic in your wechat
+   * const contact = await bot.Contact.find({name: 'lijiarui'}) // change 'lijiarui' to any contact in your WeChat
+   * const room = await bot.Room.find({topic: 'WeChat'})        // change 'WeChat' to any room topic in your WeChat
    * if (room) {
    *   try {
    *      await room.add(contact)
@@ -613,9 +779,9 @@ export class Room extends Accessory implements Sayable {
    * It works only when the bot is the owner of the room
    *
    * > Tips:
-   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/Chatie/wechaty/wiki/Puppet#3-puppet-compatible-table)
+   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/wechaty/wechaty/wiki/Puppet#3-puppet-compatible-table)
    * >
-   * > see {@link https://github.com/Chatie/wechaty/issues/1441|Web version of WeChat closed group interface}
+   * > see {@link https://github.com/wechaty/wechaty/issues/1441|Web version of WeChat closed group interface}
    *
    * @param {Contact} contact
    * @returns {Promise<void>}
@@ -623,7 +789,7 @@ export class Room extends Accessory implements Sayable {
    * const bot = new Wechaty()
    * await bot.start()
    * // after logged in...
-   * const room = await bot.Room.find({topic: 'wechat'})          // change 'wechat' to any room topic in your wechat
+   * const room = await bot.Room.find({topic: 'WeChat'})          // change 'WeChat' to any room topic in your WeChat
    * const contact = await bot.Contact.find({name: 'lijiarui'})   // change 'lijiarui' to any room member in the room you just set
    * if (room) {
    *   try {
@@ -657,7 +823,7 @@ export class Room extends Accessory implements Sayable {
    * Bot quit the room itself
    *
    * > Tips:
-   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/Chatie/wechaty/wiki/Puppet#3-puppet-compatible-table)
+   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/wechaty/wechaty/wiki/Puppet#3-puppet-compatible-table)
    *
    * @returns {Promise<void>}
    * @example
@@ -703,7 +869,7 @@ export class Room extends Accessory implements Sayable {
    * .start()
    */
   public async topic (newTopic?: string): Promise<void | string> {
-    log.verbose('Room', 'topic(%s)', newTopic ? newTopic : '')
+    log.verbose('Room', 'topic(%s)', newTopic || '')
     if (!this.isReady()) {
       log.warn('Room', 'topic() room not ready')
       throw new Error('not ready')
@@ -715,10 +881,10 @@ export class Room extends Accessory implements Sayable {
       } else {
         const memberIdList = await this.puppet.roomMemberList(this.id)
         const memberList = memberIdList
-                            .filter(id => id !== this.puppet.selfId())
-                            .map(id => this.wechaty.Contact.load(id))
+          .filter(id => id !== this.puppet.selfId())
+          .map(id => this.wechaty.Contact.load(id))
 
-        let defaultTopic = memberList[0] && memberList[0].name() || ''
+        let defaultTopic = (memberList[0] && memberList[0].name()) || ''
         for (let i = 1; i < 3 && memberList[i]; i++) {
           defaultTopic += ',' + memberList[i].name()
         }
@@ -727,13 +893,13 @@ export class Room extends Accessory implements Sayable {
     }
 
     const future = this.puppet
-        .roomTopic(this.id, newTopic)
-        .catch(e => {
-          log.warn('Room', 'topic(newTopic=%s) exception: %s',
-                            newTopic, e && e.message || e,
-                  )
-          Raven.captureException(e)
-        })
+      .roomTopic(this.id, newTopic)
+      .catch(e => {
+        log.warn('Room', 'topic(newTopic=%s) exception: %s',
+          newTopic, (e && e.message) || e,
+        )
+        Raven.captureException(e)
+      })
 
     return future
   }
@@ -745,7 +911,7 @@ export class Room extends Accessory implements Sayable {
    * SET/GET announce from the room
    * > Tips: It only works when bot is the owner of the room.
    * >
-   * > This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/Chatie/wechaty/wiki/Puppet#3-puppet-compatible-table)
+   * > This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/wechaty/wechaty/wiki/Puppet#3-puppet-compatible-table)
    *
    * @param {string} [text] If set this para, it will change room announce.
    * @returns {(Promise<void | string>)}
@@ -768,26 +934,39 @@ export class Room extends Accessory implements Sayable {
    * console.log(`room announce change from ${oldAnnounce} to ${room.announce()}`)
    */
   public async announce (text?: string): Promise<void | string> {
-    log.verbose('Room', 'announce(%s)', text ? text : '')
+    log.verbose('Room', 'announce(%s)',
+      typeof text === 'undefined'
+        ? ''
+        : `"${text || ''}"`
+    )
 
-    if (text) {
-      await this.puppet.roomAnnounce(this.id, text)
-    } else {
+    if (typeof text === 'undefined') {
       const announcement = await this.puppet.roomAnnounce(this.id)
       return announcement
+    } else {
+      await this.puppet.roomAnnounce(this.id, text)
     }
   }
 
   /**
-   * Get QR Code of the Room from the room, which can be used as scan and join the room.
+   * @deprecated: use qrCode() instead
+   */
+  public async qrcode () {
+    log.warn('Room', 'qrcode() is deprecated. use qrCode() instead.')
+    return this.qrCode()
+  }
+
+  /**
+   * Get QR Code Value of the Room from the room, which can be used as scan and join the room.
    * > Tips:
-   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/Chatie/wechaty/wiki/Puppet#3-puppet-compatible-table)
+   * 1. This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/wechaty/wechaty/wiki/Puppet#3-puppet-compatible-table)
+   * 2. The return should be the QR Code Data, instead of the QR Code Image. (the data should be less than 8KB. See: https://stackoverflow.com/a/12764370/1123955 )
    * @returns {Promise<string>}
    */
-  public async qrcode (): Promise<string> {
-    log.verbose('Room', 'qrcode()')
-    const qrcode = await this.puppet.roomQrcode(this.id)
-    return qrcode
+  public async qrCode (): Promise<string> {
+    log.verbose('Room', 'qrCode()')
+    const qrcodeValue = await this.puppet.roomQRCode(this.id)
+    return guardQrCodeValue(qrcodeValue)
   }
 
   /**
@@ -822,7 +1001,7 @@ export class Room extends Accessory implements Sayable {
    * @param {Contact} contact
    * @returns {Promise<string | null>}
    * @deprecated: use room.alias() instead
-   * @private
+   * @ignore
    */
   public async roomAlias (contact: Contact): Promise<null | string> {
     log.warn('Room', 'roomAlias() DEPRECATED. use room.alias() instead')
@@ -838,8 +1017,8 @@ export class Room extends Accessory implements Sayable {
    * const bot = new Wechaty()
    * await bot.start()
    * // after logged in...
-   * const contact = await bot.Contact.find({name: 'lijiarui'})   // change 'lijiarui' to any of contact in your wechat
-   * const room = await bot.Room.find({topic: 'wechaty'})         // change 'wechaty' to any of the room in your wechat
+   * const contact = await bot.Contact.find({name: 'lijiarui'})   // change 'lijiarui' to any of contact in your WeChat
+   * const room = await bot.Room.find({topic: 'wechaty'})         // change 'wechaty' to any of the room in your WeChat
    * if (contact && room) {
    *   if (await room.has(contact)) {
    *     console.log(`${contact.name()} is in the room wechaty!`)
@@ -856,8 +1035,8 @@ export class Room extends Accessory implements Sayable {
     }
 
     return memberIdList
-            .filter(id => id === contact.id)
-            .length > 0
+      .filter(id => id === contact.id)
+      .length > 0
   }
 
   public async memberAll ()                              : Promise<Contact[]>
@@ -868,10 +1047,10 @@ export class Room extends Accessory implements Sayable {
    * The way to search member by Room.member()
    *
    * @typedef    RoomMemberQueryFilter
-   * @property   {string} name            -Find the contact by wechat name in a room, equal to `Contact.name()`.
+   * @property   {string} name            -Find the contact by WeChat name in a room, equal to `Contact.name()`.
    * @property   {string} roomAlias       -Find the contact by alias set by the bot for others in a room.
    * @property   {string} contactAlias    -Find the contact by alias set by the contact out of a room, equal to `Contact.alias()`.
-   * [More Detail]{@link https://github.com/Chatie/wechaty/issues/365}
+   * [More Detail]{@link https://github.com/wechaty/wechaty/issues/365}
    */
 
   /**
@@ -884,18 +1063,18 @@ export class Room extends Accessory implements Sayable {
    * @param {(RoomMemberQueryFilter | string)} [query] -Optional parameter, When use memberAll(name:string), return all matched members, including name, roomAlias, contactAlias
    * @returns {Promise<Contact[]>}
    * @example
-   * const roomList:Conatct[] | null = await room.findAll()
+   * const roomList:Contact[] | null = await room.findAll()
    * if(roomList)
    *  console.log(`room all member list: `, roomList)
-   * const memberContactList: Conatct[] | null =await room.findAll(`abc`)
+   * const memberContactList: Contact[] | null =await room.findAll(`abc`)
    * console.log(`contact list with all name, room alias, alias are abc:`, memberContactList)
    */
   public async memberAll (
     query?: string | RoomMemberQueryFilter,
   ): Promise<Contact[]> {
     log.silly('Room', 'memberAll(%s)',
-                      JSON.stringify(query) || '',
-              )
+      JSON.stringify(query) || '',
+    )
 
     if (!query) {
       return this.memberList()
@@ -920,9 +1099,9 @@ export class Room extends Accessory implements Sayable {
    * const bot = new Wechaty()
    * await bot.start()
    * // after logged in...
-   * const room = await bot.Room.find({topic: 'wechaty'})           // change 'wechaty' to any room name in your wechat
+   * const room = await bot.Room.find({topic: 'wechaty'})           // change 'wechaty' to any room name in your WeChat
    * if (room) {
-   *   const member = await room.member('lijiarui')             // change 'lijiarui' to any room member in your wechat
+   *   const member = await room.member('lijiarui')             // change 'lijiarui' to any room member in your WeChat
    *   if (member) {
    *     console.log(`wechaty room got the member: ${member.name()}`)
    *   } else {
@@ -934,9 +1113,9 @@ export class Room extends Accessory implements Sayable {
    * const bot = new Wechaty()
    * await bot.start()
    * // after logged in...
-   * const room = await bot.Room.find({topic: 'wechaty'})          // change 'wechaty' to any room name in your wechat
+   * const room = await bot.Room.find({topic: 'wechaty'})          // change 'wechaty' to any room name in your WeChat
    * if (room) {
-   *   const member = await room.member({name: 'lijiarui'})        // change 'lijiarui' to any room member in your wechat
+   *   const member = await room.member({name: 'lijiarui'})        // change 'lijiarui' to any room member in your WeChat
    *   if (member) {
    *     console.log(`wechaty room got the member: ${member.name()}`)
    *   } else {
@@ -969,8 +1148,8 @@ export class Room extends Accessory implements Sayable {
   }
 
   /**
+    * @ignore
    * @ignore
-   * @private
    *
    * Get all room member from the room
    *
@@ -997,13 +1176,13 @@ export class Room extends Accessory implements Sayable {
   /**
    * Get room's owner from the room.
    * > Tips:
-   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/Chatie/wechaty/wiki/Puppet#3-puppet-compatible-table)
+   * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/wechaty/wechaty/wiki/Puppet#3-puppet-compatible-table)
    * @returns {(Contact | null)}
    * @example
    * const owner = room.owner()
    */
   public owner (): null | Contact {
-    log.info('Room', 'owner()')
+    log.verbose('Room', 'owner()')
 
     const ownerId = this.payload && this.payload.ownerId
     if (!ownerId) {
@@ -1014,6 +1193,14 @@ export class Room extends Accessory implements Sayable {
     return owner
   }
 
+  /**
+   * Get avatar from the room.
+   * @returns {FileBox}
+   * @example
+   * const fileBox = await room.avatar()
+   * const name = fileBox.name
+   * fileBox.toFile(name)
+   */
   public async avatar (): Promise<FileBox> {
     log.verbose('Room', 'avatar()')
 

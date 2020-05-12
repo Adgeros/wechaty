@@ -1,5 +1,22 @@
 #!/usr/bin/env ts-node
-
+/**
+ *   Wechaty - https://github.com/wechaty/wechaty
+ *
+ *   @copyright 2016-now Huan LI <zixia@zixia.net>
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ *
+ */
 import * as readline from 'readline'
 
 const contributeMap: {
@@ -7,34 +24,34 @@ const contributeMap: {
 } = {}
 
 function parseLine (line: string): string[] | null {
-  // [\#264](https://github.com/Chatie/wechaty/pull/264) ([lijiarui](https://github.com/lijiarui))
+  // [\#264](https://github.com/wechaty/wechaty/pull/264) ([lijiarui](https://github.com/lijiarui))
   // const regex = /(\[\\#\d+\]\([^\)]+\))\s+(\(\[[^]]+\]\([^)]+\)))/i
-  const regex = /(\[\\#\d+\])(\([^\)]+\))\s+\((\[[^\]]+\]\([^\)]+\))/
+  const regex = /(\[\\#\d+\])(\([^)]+\))\s+\((\[[^\]]+\]\([^)]+\))/
   const matches = regex.exec(line)
   if (!matches) {
     return null
   }
-  // console.log('match!')
-  // console.log(matches[1])  // [\#264]
-  // console.log(matches[2])  // (https://github.com/Chatie/wechaty/pull/264)
-  // console.log(matches[3])  // ([lijiarui](https://github.com/lijiarui)
+  // console.info('match!')
+  // console.info(matches[1])  // [\#264]
+  // console.info(matches[2])  // (https://github.com/wechaty/wechaty/pull/264)
+  // console.info(matches[3])  // ([lijiarui](https://github.com/lijiarui)
   return matches
 }
 
 function processLine (line: string): void {
   const matches = parseLine(line)
   if (matches) {
-    // console.log('match:', line)
-    // console.log(matches)
+    // console.info('match:', line)
+    // console.info(matches)
     const link        = matches[1] + matches[2]
     const contributor = matches[3]
-    // console.log('link:', link)
-    // console.log('contributor:', contributor)
+    // console.info('link:', link)
+    // console.info('contributor:', contributor)
     if (!(contributor in contributeMap)) {
       contributeMap[contributor] = []
     }
     contributeMap[contributor].push(link)
-    // console.log(contributiveness)
+    // console.info(contributiveness)
   } else {
     console.error('NO match:', line)
   }
@@ -46,15 +63,16 @@ function outputContributorMd () {
     return contributeMap[committer].length >= MIN_MAINTAINER_COMMIT_NUM
   }
 
-  const activeContributorList = Object.keys(contributeMap)
-                                      .filter(isMaintainer)
-                                      .sort(desc)
+  const activeContributorList = Object
+    .keys(contributeMap)
+    .filter(isMaintainer)
+    .sort(desc)
 
   function desc (committerA: string, committerB: string): number {
     return contributeMap[committerB].length - contributeMap[committerA].length
   }
 
-  console.log([
+  console.info([
     '',
     '# CHANGELOG',
     '',
@@ -64,10 +82,10 @@ function outputContributorMd () {
   ].join('\n'))
 
   for (const contributor of activeContributorList) {
-    console.log(`1. @${contributor}: ${contributeMap[contributor].join(' ')}`)
+    console.info(`1. @${contributor}: ${contributeMap[contributor].join(' ')}`)
   }
 
-  console.log([
+  console.info([
     '',
     '### Contributors',
     '',
@@ -83,10 +101,10 @@ function outputContributorMd () {
       continue
     }
     if (!activeContributorList.includes(contributor)) {
-      console.log(`1. @${contributor}: ${contributeMap[contributor].join(' ')}`)
+      console.info(`1. @${contributor}: ${contributeMap[contributor].join(' ')}`)
     }
   }
-  console.log()
+  console.info()
 
 }
 
@@ -99,7 +117,7 @@ async function main () {
   })
 
   rl.on('line', processLine)
-  await new Promise(r => rl.on('close', r))
+  await new Promise(resolve => rl.on('close', resolve))
 
   outputContributorMd()
 
@@ -107,8 +125,8 @@ async function main () {
 }
 
 main()
-.then(process.exit)
-.catch(e => {
-  console.error(e)
-  process.exit(1)
-})
+  .then(process.exit)
+  .catch(e => {
+    console.error(e)
+    process.exit(1)
+  })

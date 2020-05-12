@@ -1,6 +1,7 @@
 import { Contact } from './contact'
 
 export class Moment {
+
   public static post () {
     // post new moment
   }
@@ -13,7 +14,11 @@ export class Moment {
     return []
   }
 
+  /*
+   * @hideconstructor
+   */
   constructor () {
     //
   }
+
 }

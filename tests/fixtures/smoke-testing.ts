@@ -1,9 +1,9 @@
 #!/usr/bin/env ts-node
 
-// tslint:disable:no-var-requires
-const isPR = require('is-pr')
-
-import { Wechaty } from 'wechaty'
+import {
+  Wechaty,
+  VERSION,
+}           from 'wechaty'
 
 function getBotList (): Wechaty[] {
   const botList = [
@@ -12,11 +12,17 @@ function getBotList (): Wechaty[] {
     // new Wechaty({ puppet: 'wechaty-puppet-puppeteer' }),
   ]
 
-  if (!isPR) {
+  if (process.env.WECHATY_PUPPET_HOSTIE_TOKEN) {
     botList.push(
       new Wechaty({
-        puppet: 'wechaty-puppet-padchat',
-        // we use WECHATY_PUPPET_PADCHAT_TOKEN environment variable at here.
+        puppet: 'wechaty-puppet-padplus',
+      })
+    )
+  }
+  if (process.env.WECHATY_PUPPET_PADPLUS_TOKEN) {
+    botList.push(
+      new Wechaty({
+        puppet: 'wechaty-puppet-padplus',
       })
     )
   }
@@ -25,13 +31,17 @@ function getBotList (): Wechaty[] {
 }
 
 async function main () {
+  if (VERSION === '0.0.0') {
+    throw new Error('VERSION not set!')
+  }
+
   const botList = getBotList()
   try {
     await Promise.all(
       botList.map(bot => bot.start()),
     )
     botList.forEach(
-      bot => console.log(`Wechaty v${bot.version()} smoking test passed.`),
+      bot => console.info(`Wechaty v${bot.version()} smoking test passed.`),
     )
   } catch (e) {
     console.error(e)
@@ -46,8 +56,8 @@ async function main () {
 }
 
 main()
-.then(process.exit)
-.catch(e => {
-  console.error(e)
-  process.exit(1)
-})
+  .then(process.exit)
+  .catch(e => {
+    console.error(e)
+    process.exit(1)
+  })

@@ -1,5 +1,5 @@
 /**
- *   Wechaty - https://github.com/chatie/wechaty
+ *   Wechaty - https://github.com/wechaty/wechaty
  *
  *   @copyright 2016-2018 Huan LI <zixia@zixia.net>
  *
@@ -26,15 +26,16 @@ import {
 }                   from './config'
 
 export class Doctor {
+
   constructor () {
     log.verbose('Doctor', 'constructor()')
   }
 
   public chromedriverVersion (): string {
-    const spawn = require( 'child_process' ).spawnSync
+    const spawn = require('child_process').spawnSync
     let version: string
     try {
-      const cmd = spawn( 'chromedriver', [ '--version' ] )
+      const cmd = spawn('chromedriver', ['--version'])
       version = cmd.error || cmd.stdout.toString() || cmd.stderr.toString()
     } catch (e) {
       version = e.message
@@ -48,7 +49,7 @@ export class Doctor {
   public testTcp (): Promise<boolean> {
     log.verbose('Doctor', 'testTcp()')
 
-    return new Promise<boolean>(async (resolve, reject) => {
+    return new Promise<boolean>((resolve, reject) => {
       /**
        * Server
        */
@@ -82,8 +83,9 @@ export class Doctor {
          */
         client.on('error', reject)
 
-        client.on('close', _ => server.close())
+        client.on('close', () => server.close())
       })
     })
   }
+
 }

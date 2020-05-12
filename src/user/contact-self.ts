@@ -1,5 +1,5 @@
 /**
- *   Wechaty - https://github.com/chatie/wechaty
+ *   Wechaty - https://github.com/wechaty/wechaty
  *
  *   @copyright 2016-2018 Huan LI <zixia@zixia.net>
  *
@@ -17,11 +17,14 @@
  *
  *   @ignore
  */
-import { FileBox } from 'file-box'
-
 import {
+  FileBox,
   log,
 }           from '../config'
+
+import {
+  guardQrCodeValue,
+}                       from '../helper-functions/pure/guard-qr-code-value'
 
 import {
   Contact,
@@ -39,11 +42,12 @@ import {
  * })
  */
 export class ContactSelf extends Contact {
-  constructor (
-    id: string,
-  ) {
-    super(id)
-  }
+
+  // constructor (
+  //   id: string,
+  // ) {
+  //   super(id)
+  // }
 
   public async avatar ()              : Promise<FileBox>
   public async avatar (file: FileBox) : Promise<void>
@@ -66,7 +70,7 @@ export class ContactSelf extends Contact {
    * })
    *
    * @example <caption>SET the avatar for a bot</caption>
-   * import { FileBox }  from 'file-box'
+   * import { FileBox }  from 'wechaty'
    * bot.on('login', (user: ContactSelf) => {
    *   console.log(`user ${user} login`)
    *   const fileBox = FileBox.fromUrl('https://chatie.io/wechaty/images/bot-qr-code.png')
@@ -116,8 +120,8 @@ export class ContactSelf extends Contact {
       throw new Error('only can get qrcode for the login userself')
     }
 
-    const qrcodeValue = await this.puppet.contactSelfQrcode()
-    return qrcodeValue
+    const qrcodeValue = await this.puppet.contactSelfQRCode()
+    return guardQrCodeValue(qrcodeValue)
   }
 
   /**
@@ -130,7 +134,7 @@ export class ContactSelf extends Contact {
    *   console.log(`user ${user} login`)
    *   const oldName = user.name()
    *   try {
-   *     await user.setName(`${oldName}-${new Date().getTime()}`)
+   *     await user.name(`${oldName}-${new Date().getTime()}`)
    *   } catch (e) {
    *     console.error('change name failed', e)
    *   }
@@ -191,4 +195,5 @@ export class ContactSelf extends Contact {
 
     return this.puppet.contactSelfSignature(signature).then(this.sync.bind(this))
   }
+
 }

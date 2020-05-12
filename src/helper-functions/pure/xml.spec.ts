@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 /**
- *   Wechaty - https://github.com/chatie/wechaty
+ *   Wechaty - https://github.com/wechaty/wechaty
  *
  *   @copyright 2016-2018 Huan LI <zixia@zixia.net>
  *
@@ -17,8 +17,7 @@
  *   limitations under the License.
  *
  */
-// tslint:disable:no-shadowed-variable
-import test  from 'blue-tape'
+import { test } from 'tstest'
 
 import {
   digestEmoji,
@@ -39,6 +38,7 @@ test('stripHtml()', async t => {
 
 test('unescapeHtml()', async t => {
   const HTML_BEFORE_UNESCAPE  = '&apos;|&quot;|&gt;|&lt;|&amp;'
+  // eslint-disable-next-line
   const HTML_AFTER_UNESCAPE   = `'|"|>|<|&`
 
   const unescapedHtml = unescapeHtml(HTML_BEFORE_UNESCAPE)
@@ -79,9 +79,9 @@ test('unifyEmoji()', async t => {
     [
       [
         '<img class="emoji emoji1f602" text="_web" src="/zh_CN/htmledition/v2/images/spacer.gif" />',
-        '<span class=\"emoji emoji1f602\"></span>',
+        '<span class="emoji emoji1f602"></span>',
       ],
-        '<emoji code="emoji1f602"/>',
+      '<emoji code="emoji1f602"/>',
     ],
   ]
 
