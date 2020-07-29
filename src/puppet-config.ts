@@ -1,5 +1,21 @@
 /**
- * Wechaty Official Puppet Implementations List
+ *   Wechaty Chatbot SDK - https://github.com/wechaty/wechaty
+ *
+ *   @copyright 2016 Huan LI (李卓桓) <https://github.com/huan>, and
+ *                   Wechaty Contributors <https://github.com/wechaty>.
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ *
  */
 export const PUPPET_DEPENDENCIES = {
   /**
@@ -15,16 +31,16 @@ export const PUPPET_DEPENDENCIES = {
   '@juzibot/wechaty-puppet-donut': '^0.3', // https://www.npmjs.com/package/wechaty-puppet-donut (to be published)
 
   /**
-   * Wechaty Internal Puppets: dependenced by package.json
+   * Wechaty Internal Puppets: dependence by package.json
    */
-  'wechaty-puppet-hostie'    : '^0.7.9',   // https://www.npmjs.com/package/wechaty-puppet-hostie
-  'wechaty-puppet-mock'      : '^0.21.2',   // https://www.npmjs.com/package/wechaty-puppet-mock
+  'wechaty-puppet-hostie'    : '*',   // https://www.npmjs.com/package/wechaty-puppet-hostie
+  'wechaty-puppet-mock'      : '*',   // https://www.npmjs.com/package/wechaty-puppet-mock
 
   /**
    * Wechaty External Puppets
    */
-  'wechaty-puppet-padplus'   : '^0.7.15',    // https://www.npmjs.com/package/wechaty-puppet-padplus
-  'wechaty-puppet-puppeteer' : '^0.21.2',   // https://www.npmjs.com/package/wechaty-puppet-puppeteer
+  'wechaty-puppet-padplus'   : '^0.7.30',    // https://www.npmjs.com/package/wechaty-puppet-padplus
+  'wechaty-puppet-puppeteer' : '^0.23.1',   // https://www.npmjs.com/package/wechaty-puppet-puppeteer
   'wechaty-puppet-wechat4u'  : '^0.17.4',   // https://www.npmjs.com/package/wechaty-puppet-wechat4u
 }
 

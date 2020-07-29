@@ -1,7 +1,8 @@
 /**
- *   Wechaty - https://github.com/wechaty/wechaty
+ *   Wechaty Chatbot SDK - https://github.com/wechaty/wechaty
  *
- *   @copyright 2016-2018 Huan LI <zixia@zixia.net>
+ *   @copyright 2016 Huan LI (李卓桓) <https://github.com/huan>, and
+ *                   Wechaty Contributors <https://github.com/wechaty>.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -22,7 +23,7 @@ import {
   Message,
   ScanStatus,
   Wechaty,
-}               from '../src/' // from 'wechaty'
+}               from '../src/mod' // from 'wechaty'
 
 import { generate } from 'qrcode-terminal'
 
@@ -75,10 +76,8 @@ function onScan (qrcode: string, status: ScanStatus) {
   if (status === ScanStatus.Waiting || status === ScanStatus.Timeout) {
     generate(qrcode)
 
-    // Generate a QR Code online via
-    // http://goqr.me/api/doc/create-qr-code/
     const qrcodeImageUrl = [
-      'https://api.qrserver.com/v1/create-qr-code/?data=',
+      'https://wechaty.github.io/qrcode/',
       encodeURIComponent(qrcode),
     ].join('')
 

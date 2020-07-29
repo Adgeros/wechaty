@@ -1,7 +1,8 @@
 /**
- *   Wechaty - https://github.com/wechaty/wechaty
+ *   Wechaty Chatbot SDK - https://github.com/wechaty/wechaty
  *
- *   @copyright 2016-2018 Huan LI <zixia@zixia.net>
+ *   @copyright 2016 Huan LI (李卓桓) <https://github.com/huan>, and
+ *                   Wechaty Contributors <https://github.com/wechaty>.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -21,11 +22,17 @@ import WebSocket        from 'ws'
 
 import {
   Message,
-}                 from './user'
+}                 from './user/mod'
 
 import {
   EventScanPayload,
 }                         from 'wechaty-puppet'
+
+import Peer, {
+  JsonRpcPayload,
+  JsonRpcPayloadResponse,
+  parse,
+}                         from 'json-rpc-peer'
 
 import {
   config,
@@ -38,17 +45,24 @@ import {
   Wechaty,
 }                 from './wechaty'
 
+import {
+  getPeer,
+  isJsonRpcRequest,
+}                   from './io-peer/io-peer'
+
 export interface IoOptions {
   wechaty:    Wechaty,
   token:      string,
   apihost?:   string,
   protocol?:  string,
+  hostiePort?:number,
 }
 
 export const IO_EVENT_DICT = {
   botie     : 'tbw',
   error     : 'tbw',
   heartbeat : 'tbw',
+  jsonrpc   : 'JSON RPC',
   login     : 'tbw',
   logout    : 'tbw',
   message   : 'tbw',
@@ -67,12 +81,17 @@ interface IoEventScan {
   payload : EventScanPayload,
 }
 
+interface IoEventJsonRpc {
+  name: 'jsonrpc',
+  payload: JsonRpcPayload,
+}
+
 interface IoEventAny {
   name:     IoEventName,
   payload:  any,
 }
 
-type IoEvent = IoEventScan | IoEventAny
+type IoEvent = IoEventScan | IoEventJsonRpc | IoEventAny
 
 export class Io {
 
@@ -92,6 +111,8 @@ export class Io {
 
   private scanPayload?: EventScanPayload
 
+  protected jsonRpc?: Peer
+
   constructor (
     private options: IoOptions,
   ) {
@@ -107,6 +128,13 @@ export class Io {
       options.protocol,
       this.id,
     )
+
+    if (options.hostiePort) {
+      this.jsonRpc = getPeer({
+        hostieGrpcPort: this.options.hostiePort!,
+      })
+    }
+
   }
 
   public toString () {
@@ -324,6 +352,41 @@ export class Io {
       case 'logout':
         log.info('Io', 'on(logout): %s', ioEvent.payload)
         await this.options.wechaty.logout()
+        break
+
+      case 'jsonrpc':
+        log.info('Io', 'on(jsonrpc): %s', ioEvent.payload)
+
+        try {
+          const request = (ioEvent as IoEventJsonRpc).payload
+          if (!isJsonRpcRequest(request)) {
+            log.warn('Io', 'on(jsonrpc) payload is not a jsonrpc request: %s', JSON.stringify(request))
+            return
+          }
+
+          if (!this.jsonRpc) {
+            throw new Error('jsonRpc not initialized!')
+          }
+
+          const response = await this.jsonRpc.exec(request)
+          if (!response) {
+            log.warn('Io', 'on(jsonrpc) response is undefined.')
+            return
+          }
+          const payload = parse(response) as JsonRpcPayloadResponse
+
+          const jsonrpcEvent: IoEventJsonRpc = {
+            name: 'jsonrpc',
+            payload,
+          }
+
+          log.verbose('Io', 'on(jsonrpc) send(%s)', response)
+          await this.send(jsonrpcEvent)
+
+        } catch (e) {
+          log.error('Io', 'on(jsonrpc): %s', e)
+        }
+
         break
 
       default:

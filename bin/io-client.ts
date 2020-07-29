@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- *   Wechaty - https://github.com/wechaty/wechaty
+ *   Wechaty Chatbot SDK - https://github.com/wechaty/wechaty
  *
- *   @copyright 2016-2018 Huan LI <zixia@zixia.net>
+ *   @copyright 2016 Huan LI (李卓桓) <https://github.com/huan>, and
+ *                   Wechaty Contributors <https://github.com/wechaty>.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -18,12 +19,18 @@
  *
  */
 
+/* eslint-disable import/first */
+require('dotenv').config()
+
 import {
   config,
   log,
 }               from '../src/config'
 
-import { IoClient } from '../src/io-client'
+import {
+  IoClient,
+  IoClientOptions,
+}                   from '../src/io-client'
 import { Wechaty }  from '../src/wechaty'
 
 const welcome = `
@@ -55,10 +62,18 @@ async function main () {
 
   const wechaty = new Wechaty({ name: token })
 
-  const client = new IoClient({
+  const WECHATY_HOSTIE_PORT = 'WECHATY_HOSTIE_PORT'
+  const port = parseInt(process.env[WECHATY_HOSTIE_PORT] || '0')
+
+  const options: IoClientOptions = {
     token,
     wechaty,
-  })
+  }
+  if (port) {
+    options.port = port
+  }
+
+  const client = new IoClient(options)
 
   client.start()
     .catch(onError.bind(client))

@@ -1,7 +1,8 @@
 /**
- *   Wechaty - https://github.com/wechaty/wechaty
+ *   Wechaty Chatbot SDK - https://github.com/wechaty/wechaty
  *
- *   @copyright 2016-2018 Huan LI <zixia@zixia.net>
+ *   @copyright 2016 Huan LI (李卓桓) <https://github.com/huan>, and
+ *                   Wechaty Contributors <https://github.com/wechaty>.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -18,7 +19,7 @@
  */
 /**
  * DO NOT use `require('../')` here!
- * because it will casue a LOOP require ERROR
+ * because it will cause a LOOP require ERROR
  */
 import { StateSwitch }  from 'state-switch'
 
@@ -27,7 +28,7 @@ import {
   PuppetServerOptions,
 }                       from 'wechaty-puppet-hostie'
 
-import { Message }      from './user'
+import { Message }      from './user/mod'
 
 import {
   log,
@@ -38,6 +39,11 @@ import { Wechaty }      from './wechaty'
 export interface IoClientOptions {
   token   : string,
   wechaty : Wechaty,
+  port?: number
+}
+
+const DEFAULT_IO_CLIENT_OPTIONS: Partial<IoClientOptions> = {
+  port: 8788,
 }
 
 export class IoClient {
@@ -51,12 +57,25 @@ export class IoClient {
 
   private state: StateSwitch
 
+  protected options: Required<IoClientOptions>
+
   constructor (
-    public options: IoClientOptions,
+    options: IoClientOptions,
   ) {
-    log.verbose('IoClient', 'constructor({token: %s})',
-      options.token
+    log.verbose('IoClient', 'constructor({%s})',
+      Object.keys(options)
+        .map(key => {
+          return `${key}:${(options as any)[key]}`
+        })
+        .reduce((acc, cur) => `${acc}, ${cur}`)
     )
+
+    const normalizedOptions = {
+      ...DEFAULT_IO_CLIENT_OPTIONS,
+      ...options,
+    } as Required<IoClientOptions>
+
+    this.options = normalizedOptions
 
     this.state = new StateSwitch('IoClient', { log })
   }
@@ -69,7 +88,7 @@ export class IoClient {
     }
 
     const options: PuppetServerOptions = {
-      endpoint : '0.0.0.0:8788',
+      endpoint : '0.0.0.0:' + this.options.port,
       puppet   : this.options.wechaty.puppet,
       token    : this.options.token,
     }
@@ -127,10 +146,15 @@ export class IoClient {
     }
 
     wechaty
-      .on('login',    user => log.info('IoClient', `${user.name()} logined`))
-      .on('logout',   user => log.info('IoClient', `${user.name()} logouted`))
-      .on('scan',     (url, code) => log.info('IoClient', `[${code}] ${url}`))
+      .on('login',    user => log.info('IoClient', `${user.name()} logged in`))
+      .on('logout',   user => log.info('IoClient', `${user.name()} logged out`))
       .on('message',  msg => this.onMessage(msg))
+      .on('scan',     (url, code) => {
+        log.info('IoClient', [
+          `[${code}] ${url}]`,
+          `Online QR Code Image: https://wechaty.github.io/qrcode/${url}`,
+        ].join('\n'))
+      })
   }
 
   private async startIo (): Promise<void> {
@@ -147,8 +171,9 @@ export class IoClient {
     }
 
     this.io = new Io({
-      token   : this.options.token,
-      wechaty : this.options.wechaty,
+      hostiePort : this.options.port,
+      token      : this.options.token,
+      wechaty    : this.options.wechaty,
     })
 
     try {
