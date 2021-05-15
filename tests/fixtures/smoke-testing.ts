@@ -31,17 +31,17 @@ function getBotList (): Wechaty[] {
     // new Wechaty({ puppet: 'wechaty-puppet-puppeteer' }),
   ]
 
-  if (process.env.WECHATY_PUPPET_HOSTIE_TOKEN) {
+  if (process.env.WECHATY_PUPPET_SERVICE_TOKEN) {
     botList.push(
       new Wechaty({
-        puppet: 'wechaty-puppet-hostie',
+        puppet: 'wechaty-puppet-service',
       })
     )
   }
-  if (process.env.WECHATY_PUPPET_PADPLUS_TOKEN) {
+  if (process.env.WECHATY_PUPPET_PADLOCAL_TOKEN) {
     botList.push(
       new Wechaty({
-        puppet: 'wechaty-puppet-padplus',
+        puppet: 'wechaty-puppet-padlocal',
       })
     )
   }

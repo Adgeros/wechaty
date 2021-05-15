@@ -31,6 +31,8 @@ import {
   log,
 }                   from 'wechaty-puppet'
 
+import { looseInstanceOfClass } from './helper-functions/mod'
+
 import {
   PuppetModuleName,
   PUPPET_NAME_DEFAULT,
@@ -117,6 +119,7 @@ export class Config {
   public default = DEFAULT_SETTING
 
   public apihost = process.env.WECHATY_APIHOST || DEFAULT_SETTING.DEFAULT_APIHOST
+  public serviceIp = process.env.WECHATY_PUPPET_SERVICE_IP || ''
 
   public systemPuppetName (): PuppetModuleName {
     return (
@@ -163,7 +166,7 @@ export const AT_SEPARATOR_REGEX = /[\u2005\u0020]/
 
 export function qrcodeValueToImageUrl (qrcodeValue: string): string {
   return [
-    'https://wechaty.github.io/qrcode/',
+    'https://wechaty.js.org/qrcode/',
     encodeURIComponent(qrcodeValue),
   ].join('')
 }
@@ -173,11 +176,24 @@ export function isProduction (): boolean {
       || process.env.NODE_ENV === 'prod'
 }
 
+/**
+ * Huan(202011):
+ *  Create a `looseInstanceOfClass` to check `FileBox` and `Puppet` instances #2090
+ *    https://github.com/wechaty/wechaty/issues/2090
+ */
+type FileBoxClass = FileBox & {
+  new (...args: any): FileBox
+}
+const looseInstanceOfFileBox = looseInstanceOfClass(
+  FileBox as any as FileBoxClass
+)
+
 export {
   log,
   FileBox,
   MemoryCard,
   Raven,
+  looseInstanceOfFileBox,
 
   VERSION,
 }

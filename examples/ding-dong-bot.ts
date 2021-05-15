@@ -77,7 +77,7 @@ function onScan (qrcode: string, status: ScanStatus) {
     generate(qrcode)
 
     const qrcodeImageUrl = [
-      'https://wechaty.github.io/qrcode/',
+      'https://wechaty.js.org/qrcode/',
       encodeURIComponent(qrcode),
     ].join('')
 
@@ -91,11 +91,10 @@ function onScan (qrcode: string, status: ScanStatus) {
 
 function onLogin (user: Contact) {
   console.info(`${user.name()} login`)
-  bot.say('Wechaty login').catch(console.error)
 }
 
 function onLogout (user: Contact) {
-  console.info(`${user.name()} logouted`)
+  console.info(`${user.name()} logged out`)
 }
 
 function onError (e: Error) {

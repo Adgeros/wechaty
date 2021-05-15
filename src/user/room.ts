@@ -19,7 +19,7 @@
  */
 import { instanceToClass } from 'clone-class'
 
-import { Wechaty } from '../wechaty'
+import { Wechaty }          from '../wechaty'
 
 import {
   FOUR_PER_EM_SPACE,
@@ -27,10 +27,11 @@ import {
 
   log,
   Raven,
-}                       from '../config'
+  looseInstanceOfFileBox,
+}                           from '../config'
 import {
   Sayable,
-}                       from '../types'
+}                           from '../types'
 
 import {
   guardQrCodeValue,
@@ -45,6 +46,7 @@ import {
   RoomMemberQueryFilter,
   RoomPayload,
   RoomQueryFilter,
+  PayloadType,
 }                         from 'wechaty-puppet'
 
 import { RoomEventEmitter } from '../events/room-events'
@@ -129,22 +131,34 @@ class Room extends RoomEventEmitter implements Sayable {
   ): Promise<Array<T['prototype']>> {
     log.verbose('Room', 'findAll(%s)', JSON.stringify(query) || '')
 
-    const invalidDict: { [id: string]: true } = {}
-
     try {
       const roomIdList = await this.wechaty.puppet.roomSearch(query)
       const roomList = roomIdList.map(id => this.load(id))
-      await Promise.all(
-        roomList.map(
-          room => room.ready()
-            .catch(e => {
-              log.warn('Room', 'findAll() room.ready() rejection: %s', e)
-              invalidDict[room.id] = true
-            })
-        ),
-      )
 
-      return roomList.filter(room => !invalidDict[room.id])
+      const BATCH_SIZE = 10
+      let   batchIndex = 0
+
+      const invalidSet: Set<string> = new Set()
+      while (batchIndex * BATCH_SIZE < roomList.length) {
+        const batchRoomList = roomList.slice(
+          BATCH_SIZE * batchIndex,
+          BATCH_SIZE * (batchIndex + 1),
+        )
+
+        await Promise.all(
+          batchRoomList.map(
+            room => room.ready()
+              .catch(e => {
+                log.warn('Room', 'findAll() room.ready() rejection:\n%s', e.stack)
+                invalidSet.add(room.id)
+              })
+          ),
+        )
+
+        batchIndex++
+      }
+
+      return roomList.filter(room => !invalidSet.has(room.id))
 
     } catch (e) {
       log.verbose('Room', 'findAll() rejected: %s', e.message)
@@ -265,7 +279,7 @@ class Room extends RoomEventEmitter implements Sayable {
    * @property {string}  id - Room id.
    * This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/wechaty/wechaty/wiki/Puppet#3-puppet-compatible-table)
    */
-  constructor (
+  protected constructor (
     public readonly id: string,
   ) {
     super()
@@ -302,15 +316,6 @@ class Room extends RoomEventEmitter implements Sayable {
   }
 
   /**
-    * @ignore
-   * @ignore
-   * @deprecated: Use `sync()` instead
-   */
-  public async refresh (): Promise<void> {
-    await this.sync()
-  }
-
-  /**
    * Force reload data for Room, Sync data from puppet API again.
    *
    * @returns {Promise<void>}
@@ -339,8 +344,8 @@ class Room extends RoomEventEmitter implements Sayable {
     }
 
     if (forceSync) {
-      await this.wechaty.puppet.roomPayloadDirty(this.id)
-      await this.wechaty.puppet.roomMemberPayloadDirty(this.id)
+      await this.wechaty.puppet.dirtyPayload(PayloadType.Room, this.id)
+      await this.wechaty.puppet.dirtyPayload(PayloadType.RoomMember, this.id)
     }
     this.payload = await this.wechaty.puppet.roomPayload(this.id)
 
@@ -350,16 +355,24 @@ class Room extends RoomEventEmitter implements Sayable {
 
     const memberIdList = await this.wechaty.puppet.roomMemberList(this.id)
 
-    await Promise.all(
-      memberIdList
-        .map(id => this.wechaty.Contact.load(id))
-        .map(contact => {
-          contact.ready()
-            .catch(e => {
-              log.verbose('Room', 'ready() member.ready() rejection: %s', e)
-            })
-        }),
-    )
+    const memberList = memberIdList.map(id => this.wechaty.Contact.load(id))
+
+    const BATCH_SIZE = 16
+    let   batchIndex = 0
+
+    while (batchIndex * BATCH_SIZE < memberList.length) {
+      const batchMemberList = memberList.slice(
+        BATCH_SIZE * batchIndex,
+        BATCH_SIZE * (batchIndex + 1),
+      )
+      await Promise.all(
+        batchMemberList.map(
+          c => c.ready().catch(e => log.error('Room', 'ready() member.ready() exception:\n%s', e.stack))
+        ),
+      )
+
+      batchIndex++
+    }
   }
 
   /**
@@ -542,7 +555,7 @@ class Room extends RoomEventEmitter implements Sayable {
         text,
         mentionList.map(c => c.id),
       )
-    } else if (something instanceof FileBox) {
+    } else if (looseInstanceOfFileBox(something)) {
       /**
        * 2. File Message
        */
@@ -959,14 +972,6 @@ class Room extends RoomEventEmitter implements Sayable {
   }
 
   /**
-   * @deprecated: use qrCode() instead
-   */
-  public async qrcode () {
-    log.warn('Room', 'qrcode() is deprecated. use qrCode() instead.')
-    return this.qrCode()
-  }
-
-  /**
    * Get QR Code Value of the Room from the room, which can be used as scan and join the room.
    * > Tips:
    * 1. This function is depending on the Puppet Implementation, see [puppet-compatible-table](https://github.com/wechaty/wechaty/wiki/Puppet#3-puppet-compatible-table)
@@ -1004,18 +1009,6 @@ class Room extends RoomEventEmitter implements Sayable {
     }
 
     return null
-  }
-
-  /**
-   * Same as function alias
-   * @param {Contact} contact
-   * @returns {Promise<string | null>}
-   * @deprecated: use room.alias() instead
-   * @ignore
-   */
-  public async roomAlias (contact: Contact): Promise<null | string> {
-    log.warn('Room', 'roomAlias() DEPRECATED. use room.alias() instead')
-    return this.alias(contact)
   }
 
   /**

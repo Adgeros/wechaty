@@ -5,12 +5,7 @@ set -eo pipefail
 function deployVersion () {
   ARTIFACT_IMAGE=$1
   IMAGE=$2
-  VERSION=$3
-
-  SEMVER_MAJOR=$(echo "$VERSION" | cut -d. -f1)
-  SEMVER_MINOR=$(echo "$VERSION" | cut -d. -f2)
-
-  TAG="$SEMVER_MAJOR.$SEMVER_MINOR"
+  TAG=$3
 
   echo "Deploying TAG=$TAG"
   docker tag "${ARTIFACT_IMAGE}" "${IMAGE}:${TAG}"
@@ -35,9 +30,35 @@ function deployNext () {
   docker push "${IMAGE}:next"
 }
 
+function deployOnbuild () {
+  ARTIFACT_IMAGE=$1
+  TAG=$2
+
+  docker build -t "wechaty/onbuild:$TAG" - <<__DOCKERFILE_ONBUILD__
+FROM $ARTIFACT_IMAGE
+
+ONBUILD ARG NODE_ENV
+ONBUILD ENV NODE_ENV \$NODE_ENV
+
+ONBUILD WORKDIR /bot
+
+ONBUILD COPY package.json .
+ONBUILD RUN jq 'del(.dependencies.wechaty)' package.json | sponge package.json \
+    && npm install \
+    && sudo rm -fr /tmp/* ~/.npm
+ONBUILD COPY . .
+
+ONBUILD RUN npm run build --if-present
+CMD [ "npm", "start" ]
+__DOCKERFILE_ONBUILD__
+
+  echo "Deploying wechaty/onbuild:$TAG"
+  docker push "wechaty/onbuild:$TAG"
+}
+
 function main () {
-  artifactImage='wechaty:test'
-  dockerImage='zixia/wechaty'
+  artifactImage='wechaty:artifact'
+  dockerImage='wechaty/wechaty'
 
   # Shellcheck - https://github.com/koalaman/shellcheck/wiki/SC2086
   options=('--rm')
@@ -70,13 +91,19 @@ function main () {
 
     deploy)
       version=$(npx pkg-jq -r .version)
+      majorVer=$(echo "$version" | cut -d. -f1)
+      minorVer=$(echo "$version" | cut -d. -f2)
+      tag="${majorVer}.${minorVer}"
 
-      deployVersion "$artifactImage" "$dockerImage" "$version"
+      deployVersion "$artifactImage" "$dockerImage" "$tag"
+      deployOnbuild "$artifactImage" "$tag"
 
-      if npx --package @chatie/semver semver-is-prod "$VERSION"; then
+      if npx --package @chatie/semver semver-is-prod "$version"; then
         deployLatest "$artifactImage" "$dockerImage"
+        deployOnbuild "$artifactImage" latest
       else
         deployNext "$artifactImage" "$dockerImage"
+        deployOnbuild "$artifactImage" next
       fi
       ;;
 
